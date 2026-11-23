@@ -36,3 +36,7 @@ go.work.sum
 /bin/
 CLAUDE.md
 .claude/
+
+# Binaries are published on GitHub Releases
+/resources/releases/*
+!/resources/releases/.gitkeep
