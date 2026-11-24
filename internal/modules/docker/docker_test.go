@@ -289,7 +289,10 @@ func TestEndpointOrder(t *testing.T) {
 	if len(warnings) != 1 || paths[0] != "/var/run/docker.sock" {
 		t.Errorf("got %v %v", paths, warnings)
 	}
-	for _, host := range []string{"", "tcp://x", "ssh://x", "unix://relative", "http://x"} {
+	if path, isLocal := localPath("npipe:////./pipe/docker_engine"); !isLocal || path != `\\.\pipe\docker_engine` {
+		t.Errorf("pipe: %q %v", path, isLocal)
+	}
+	for _, host := range []string{"npipe:////server/pipe/docker_engine", "npipe://x", "", "tcp://x", "ssh://x", "unix://relative", "http://x"} {
 		if _, isLocal := localPath(host); isLocal {
 			t.Errorf("%q is not local", host)
 		}

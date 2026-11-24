@@ -110,7 +110,11 @@ func localPath(host string) (string, bool) {
 		return filepath.Clean(path), true
 	}
 	if path, found := strings.CutPrefix(host, "npipe://"); found {
-		return strings.ReplaceAll(path, "/", `\`), true
+		path = strings.ReplaceAll(path, "/", `\`)
+		return path, isLocalPipe(path)
 	}
 	return "", false
 }
+
+// isLocalPipe rejects pipes of other machines.
+func isLocalPipe(path string) bool { return strings.HasPrefix(path, `\\.\pipe\`) }
