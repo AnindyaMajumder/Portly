@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -45,8 +44,9 @@ func (s *session) println(text string) { fmt.Fprintln(s.console.Out, text) }
 // short replaces the home directory with ~.
 func (s *session) short(path string) string {
 	home := s.console.Home
-	if home != "" && (path == home || strings.HasPrefix(path, home+string(filepath.Separator))) {
-		path = "~" + path[len(home):]
+	rest, isInside := strings.CutPrefix(path, home)
+	if home != "" && isInside && (rest == "" || rest[0] == '/' || rest[0] == '\\') {
+		path = "~" + rest
 	}
 	return clean(path)
 }
