@@ -172,6 +172,9 @@ func TestSmallParsers(t *testing.T) {
 	if got := parseContainerMount([]byte("1 2 0:1 /var/lib/docker/containers/" + id + "/hostname /etc/hostname rw")); got != id {
 		t.Errorf("mount id: %q", got)
 	}
+	if got := parseContainerMount([]byte("1 2 0:1 / /var/lib/docker/containers/" + id + "/mounts/shm rw")); got != "" {
+		t.Errorf("an engine host is not a container: %q", got)
+	}
 	if got := splitArgs([]byte("a\x00\x00b\x00")); !slices.Equal(got, []string{"a", "", "b"}) {
 		t.Errorf("args: %q", got)
 	}

@@ -305,8 +305,15 @@ var containerMount = regexp.MustCompile(`/(?:containers|overlay-containers)/([0-
 
 // parseContainerMount finds our container ID when the cgroup hides it.
 func parseContainerMount(mountInfo []byte) string {
-	if match := containerMount.FindSubmatch(mountInfo); match != nil {
-		return string(match[1])
+	for line := range strings.Lines(string(mountInfo)) {
+		fields := strings.Fields(line)
+		// Engine hosts show container paths too, but not bound over /etc
+		if len(fields) < 5 || !strings.HasPrefix(fields[4], "/etc/host") {
+			continue
+		}
+		if match := containerMount.FindStringSubmatch(fields[3]); match != nil {
+			return match[1]
+		}
 	}
 	return ""
 }
