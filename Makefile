@@ -10,7 +10,7 @@ TARGETS := linux/386 linux/amd64 linux/arm linux/arm64 linux/riscv64 linux/ppc64
 export CGO_ENABLED ?= 0
 
 .DEFAULT_GOAL := help
-.PHONY: snapshot help build fmt vet arch test cover lint vuln fuzz e2e docker-test distro-test perf cycles cross check check-all
+.PHONY: snapshot help build fmt vet vet-all arch test cover lint vuln fuzz e2e docker-test distro-test perf cycles cross check check-all
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-13s %s\n", $$1, $$2}'
@@ -23,6 +23,9 @@ fmt: ## Fail on unformatted files
 
 vet: ## Vet on every OS
 	@for os in linux darwin windows; do echo "vet $$os"; GOOS=$$os go vet ./... || exit 1; done
+
+vet-all: ## Vet every release target
+	@for target in $(TARGETS); do echo "vet $$target"; GOOS=$${target%/*} GOARCH=$${target#*/} go vet ./... || exit 1; done
 
 arch: ## Architecture rules
 	go test -count=1 ./tests/arch
@@ -68,4 +71,4 @@ cross: ## Build every release target
 
 check: fmt vet arch test build ## Quick gate
 
-check-all: check lint vuln cover fuzz cross e2e docker-test distro-test perf ## Everything
+check-all: check vet-all lint vuln cover fuzz cross e2e docker-test distro-test perf ## Everything

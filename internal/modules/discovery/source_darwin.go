@@ -73,9 +73,7 @@ func (s source) scan(ctx context.Context) (domain.Snapshot, error) {
 // sockets lists what lsof sees, plus what only netstat sees.
 func (s source) sockets(ctx context.Context) ([]domain.Socket, map[domain.Protocol]domain.Completeness, error) {
 	output, err := tool(ctx, "/usr/sbin/lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-iUDP", "-F0pufdtPnT")
-	var exited *exec.ExitError
-	// lsof exits 1 when nothing matches
-	if err != nil && !errors.As(err, &exited) {
+	if err != nil && !isNothingFound(err) {
 		return nil, nil, fmt.Errorf("run lsof: %w", err)
 	}
 	sockets := parseLsof(output)
@@ -91,6 +89,12 @@ func (s source) sockets(ctx context.Context) ([]domain.Socket, map[domain.Protoc
 		sockets = addHidden(sockets, kernel)
 	}
 	return sockets, completeness, nil
+}
+
+// isNothingFound accepts lsof's status 1. A killed lsof has no exit status.
+func isNothingFound(err error) bool {
+	var exited *exec.ExitError
+	return errors.As(err, &exited) && exited.ExitCode() == 1
 }
 
 // host reads facts about this machine and caller.
@@ -118,7 +122,8 @@ func (s source) processFrom(info *unix.KinfoProc, host domain.Host) domain.Proce
 		Kernel: info.Proc.P_flag&flagSystem != 0, TTY: domain.TriOf(info.Eproc.Tdev != -1),
 		Suspended: info.Proc.P_stat == stateStopped, Zombie: info.Proc.P_stat == stateZombie,
 		Tracer: domain.TriOf(info.Proc.P_flag&flagTraced != 0), Caught: domain.TriOf(info.Proc.P_sigcatch&stopSignal != 0),
-		Ignored: domain.TriOf(info.Proc.P_sigignore&stopSignal != 0), Blocked: domain.TriOf(info.Proc.P_sigmask&stopSignal != 0),
+		// The kernel never fills in the blocked mask
+		Ignored: domain.TriOf(info.Proc.P_sigignore&stopSignal != 0), Blocked: domain.Unknown,
 		Unit: domain.Unit{Kind: domain.UnitNone}, Service: domain.No,
 	}
 	if session, err := unix.Getsid(pid); err == nil {
@@ -219,7 +224,10 @@ func (s source) job(ctx context.Context, snapshot domain.Snapshot, owner domain.
 
 // reread finds the socket first and reads identity last, right before the signal.
 func (s source) reread(holder domain.Holder, id domain.SocketID) (domain.Process, bool, error) {
-	output, _ := tool(context.Background(), "/usr/sbin/lsof", "-nP", "-a", "-p", strconv.Itoa(holder.PID), "-i"+strings.ToUpper(string(id.Protocol))+":"+strconv.Itoa(int(id.Port)), "-F0pufdtPnT")
+	output, err := tool(context.Background(), "/usr/sbin/lsof", "-nP", "-a", "-p", strconv.Itoa(holder.PID), "-i"+strings.ToUpper(string(id.Protocol))+":"+strconv.Itoa(int(id.Port)), "-F0pufdtPnT")
+	if err != nil && !isNothingFound(err) {
+		return domain.Process{}, false, fmt.Errorf("run lsof: %w", err)
+	}
 	holds := false
 	for _, socket := range parseLsof(output) {
 		holds = holds || socket.ID.Same(id) && socket.HeldBy(holder.PID)

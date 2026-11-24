@@ -90,6 +90,14 @@ func TestHostInsideContainer(t *testing.T) {
 	if host := unclear.source().host(); host.InContainer != domain.Unknown {
 		t.Errorf("unclear: %+v", host)
 	}
+	unclear.link("proc/self/ns/pid", initialPIDNamespace)
+	if host := unclear.source().host(); host.InContainer != domain.Unknown {
+		t.Errorf("one namespace proves nothing: %+v", host)
+	}
+	unclear.link("proc/self/ns/cgroup", initialCgroupNamespace)
+	if host := unclear.source().host(); host.InContainer != domain.No {
+		t.Errorf("a host without systemd: %+v", host)
+	}
 	unclear.write(".dockerenv", "")
 	if host := unclear.source().host(); host.InContainer != domain.Yes || host.SelfContainer != "" {
 		t.Errorf("marker: %+v", host)

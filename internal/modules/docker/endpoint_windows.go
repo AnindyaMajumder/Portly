@@ -32,15 +32,33 @@ func openEndpoint(path string, _ int) (endpoint, domain.Answer) {
 		return endpoint{}, answerFor(err)
 	}
 	defer file.Close()
-	descriptor, err := windows.GetSecurityInfo(windows.Handle(file.Fd()), windows.SE_KERNEL_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	owner, err := ownerOf(file)
 	if err != nil {
 		return endpoint{}, domain.AnswerUnobserved
 	}
-	owner, _, err := descriptor.Owner()
-	if err != nil || !isTrustedOwner(owner) {
+	if !isTrustedOwner(owner) {
 		return endpoint{}, domain.AnswerAbsent
 	}
 	return endpoint{path: path, ownerUID: owner.String()}, domain.AnswerOK
+}
+
+// ownerOf reads the pipe's owner without leaving overlapped mode.
+func ownerOf(file *os.File) (*windows.SID, error) {
+	raw, err := file.SyscallConn()
+	if err != nil {
+		return nil, err
+	}
+	var owner *windows.SID
+	var failure error
+	err = raw.Control(func(handle uintptr) {
+		descriptor, err := windows.GetSecurityInfo(windows.Handle(handle), windows.SE_KERNEL_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+		if err != nil {
+			failure = err
+			return
+		}
+		owner, _, failure = descriptor.Owner()
+	})
+	return owner, errors.Join(err, failure)
 }
 
 // isTrustedOwner matches the system, administrators and the caller.
@@ -92,7 +110,7 @@ func (e endpoint) dial(ctx context.Context) (net.Conn, error) {
 	for {
 		file, err := openPipe(e.path)
 		if err == nil {
-			return pipeConn{file, pipeAddress(e.path)}, nil
+			return e.verified(file)
 		}
 		if !errors.Is(err, windows.ERROR_PIPE_BUSY) {
 			return nil, err
@@ -103,6 +121,16 @@ func (e endpoint) dial(ctx context.Context) (net.Conn, error) {
 		case <-time.After(pipeRetry):
 		}
 	}
+}
+
+// verified checks this very connection, because the pipe may have been replaced.
+func (e endpoint) verified(file *os.File) (net.Conn, error) {
+	owner, err := ownerOf(file)
+	if err != nil || owner.String() != e.ownerUID {
+		_ = file.Close()
+		return nil, os.ErrPermission
+	}
+	return pipeConn{file, pipeAddress(e.path)}, nil
 }
 
 // answerFor sorts connection errors by what they mean for a stop.

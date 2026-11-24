@@ -1,10 +1,12 @@
 package stopper
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -49,7 +51,33 @@ func startChild(t *testing.T, mode string) (*exec.Cmd, domain.ProcessID) {
 	if _, err := output.Read(make([]byte, 6)); err != nil {
 		t.Fatal(err)
 	}
-	return command, domain.ProcessID{PID: command.Process.Pid, Start: "1", UserID: strconv.Itoa(os.Getuid()), Exe: os.Args[0]}
+	return command, domain.ProcessID{PID: command.Process.Pid, Start: startOf(t, command.Process.Pid), UserID: strconv.Itoa(os.Getuid()), Exe: os.Args[0]}
+}
+
+// startOf reads a child's start time.
+func startOf(t *testing.T, pid int) string {
+	t.Helper()
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Fields(string(data[strings.LastIndexByte(string(data), ')')+1:]))[19]
+}
+
+// TestAliveWithoutPidfd tells zombies and reused PIDs apart.
+func TestAliveWithoutPidfd(t *testing.T) {
+	command, id := startChild(t, "normal")
+	pinned := &processPin{id: id, fd: noPidfd}
+	reused := &processPin{id: domain.ProcessID{PID: id.PID, Start: "1"}, fd: noPidfd}
+	if !pinned.Alive() || reused.Alive() {
+		t.Error("only the same process is alive")
+	}
+	_ = command.Process.Kill()
+	for deadline := time.Now().Add(5 * time.Second); pinned.Alive(); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a zombie is not alive")
+		}
+	}
 }
 
 // approve builds an approval for one child.

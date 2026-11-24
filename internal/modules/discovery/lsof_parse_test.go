@@ -76,6 +76,17 @@ func TestHiddenSockets(t *testing.T) {
 	}
 }
 
+// TestLinkLocalAddressesMatch covers missing and embedded zones.
+func TestLinkLocalAddressesMatch(t *testing.T) {
+	kernel, _ := parseNetstat([]byte("udp6 0 0 fe80::1%en0.5353 *.*\n"), domain.UDP)
+	for _, name := range []string{"[fe80::1]:5353", "[fe80:4::1]:5353"} {
+		visible := parseLsof([]byte(lsofRecord("p10", "u501") + lsofRecord("f3", "tIPv6", "d0xabc", "PUDP", "n"+name)))
+		if joined := addHidden(visible, kernel); len(joined) != 1 {
+			t.Errorf("%s: %+v", name, joined)
+		}
+	}
+}
+
 // TestParseLaunchctl reads only the services block.
 func TestParseLaunchctl(t *testing.T) {
 	data := "system = {\n\tpid = 5\n\tservices = {\n\t\t     123      - \tcom.apple.x\n\t\t       0      - \tcom.idle\n\t\t     77     (pe) \thomebrew.mxcl.redis\n\t}\n\tother = {\n\t\t 9 - no\n\t}\n}\n"

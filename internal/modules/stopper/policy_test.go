@@ -698,7 +698,7 @@ func checkTarget(t *testing.T, snapshot domain.Snapshot, target domain.StopTarge
 func TestSystemAccounts(t *testing.T) {
 	host := domain.Host{SystemUIDMax: 999}
 	for userID, want := range map[string]bool{
-		"0": true, "999": true, "1000": false, "65534": true, "": true, "x": true,
+		"0": true, "999": true, "1000": false, "65534": true, "4294967294": true, "": true, "x": true,
 		"S-1-5-18": true, "S-1-5-21-1-2-3-1001": false, "S-1-12-1-5": false,
 	} {
 		if got := isSystemAccount(host, userID); got != want {

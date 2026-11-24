@@ -156,14 +156,26 @@ func parseNetstat(data []byte, protocol domain.Protocol) ([]domain.Socket, domai
 func addHidden(visible, kernel []domain.Socket) []domain.Socket {
 	unseen := map[domain.AddressPort]int{}
 	for _, socket := range visible {
-		unseen[socket.ID.AddressPort]++
+		unseen[withoutScope(socket.ID.AddressPort)]++
 	}
 	for _, socket := range kernel {
-		if unseen[socket.ID.AddressPort]--; unseen[socket.ID.AddressPort] < 0 {
+		key := withoutScope(socket.ID.AddressPort)
+		if unseen[key]--; unseen[key] < 0 {
 			visible = append(visible, socket)
 		}
 	}
 	return visible
+}
+
+// withoutScope drops zones, which lsof omits or embeds in the address.
+func withoutScope(address domain.AddressPort) domain.AddressPort {
+	address.Scope = ""
+	if address.Addr.Is6() && address.Addr.IsLinkLocalUnicast() {
+		raw := address.Addr.As16()
+		raw[2], raw[3] = 0, 0
+		address.Addr = netip.AddrFrom16(raw)
+	}
+	return address
 }
 
 // parseLaunchctl maps main PIDs to labels, from the services block of launchctl print.

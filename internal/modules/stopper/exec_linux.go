@@ -1,8 +1,12 @@
 package stopper
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"os"
 	"slices"
+	"strings"
 
 	"golang.org/x/sys/unix"
 
@@ -42,7 +46,7 @@ func pinProcess(id domain.ProcessID) (pin, error) {
 // Alive polls the pidfd, because signal 0 also succeeds on zombies.
 func (p *processPin) Alive() bool {
 	if p.fd == noPidfd {
-		return unix.Kill(p.id.PID, 0) == nil
+		return p.isSameRunning()
 	}
 	polled := []unix.PollFd{{Fd: int32(p.fd), Events: unix.POLLIN}}
 	for {
@@ -52,6 +56,18 @@ func (p *processPin) Alive() bool {
 		}
 		return err == nil && count == 0
 	}
+}
+
+// isSameRunning compares start time and state, for kernels without a pidfd.
+func (p *processPin) isSameRunning() bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", p.id.PID))
+	closing := bytes.LastIndexByte(data, ')')
+	if err != nil || closing < 0 {
+		return false
+	}
+	fields := strings.Fields(string(data[closing+1:]))
+	const state, start = 0, 19
+	return len(fields) > start && fields[state] != "Z" && fields[state] != "X" && fields[start] == p.id.Start
 }
 
 // Terminate asks the approved root to stop, and wakes it when suspended.

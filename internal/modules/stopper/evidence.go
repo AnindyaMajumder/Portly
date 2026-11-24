@@ -94,7 +94,8 @@ func descendantProblem(snapshot domain.Snapshot, pid int) domain.Code {
 	return ""
 }
 
-const nobodyUID = 65534
+// nobody on Linux and on macOS
+var nobodyUIDs = []uint64{65534, 4294967294}
 
 // isSystemAccount treats unknown users as system accounts.
 func isSystemAccount(host domain.Host, userID string) bool {
@@ -102,5 +103,5 @@ func isSystemAccount(host domain.Host, userID string) bool {
 		return !strings.HasPrefix(userID, "S-1-5-21-") && !strings.HasPrefix(userID, "S-1-12-1-")
 	}
 	uid, err := strconv.ParseUint(userID, 10, 32)
-	return err != nil || uint32(uid) <= host.SystemUIDMax || uid == nobodyUID
+	return err != nil || uint32(uid) <= host.SystemUIDMax || slices.Contains(nobodyUIDs, uid)
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/AnindyaMajumder/Portly/internal/app"
@@ -317,6 +318,8 @@ func (s *session) fail(err error) int {
 
 // SystemConsole describes the real terminal.
 func SystemConsole(version string) Console {
+	lipgloss.EnableLegacyWindowsANSI(os.Stdout)
+	lipgloss.EnableLegacyWindowsANSI(os.Stderr)
 	executable, _ := os.Executable()
 	home, _ := os.UserHomeDir()
 	width, isTerminal := windowSize(os.Stdout)

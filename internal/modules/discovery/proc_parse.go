@@ -186,7 +186,7 @@ func stopSignalIn(mask string) domain.Tri {
 }
 
 // Podman's conmon has its own scope and is not the container
-var containerSegment = regexp.MustCompile(`^(?:docker-|libpod-|cri-containerd-|crio-)?([0-9a-f]{64})(?:\.scope)?$`)
+var containerSegment = regexp.MustCompile(`^(?:docker-|libpod-payload-|libpod-|cri-containerd-|crio-)?([0-9a-f]{64})(?:\.scope)?$`)
 
 // cgroupInfo says which containers and unit a process belongs to.
 type cgroupInfo struct {

@@ -39,7 +39,24 @@ type source struct {
 }
 
 // newSource reads the real system.
-func newSource() source { return source{users: &accounts{}} }
+func newSource() source {
+	dropDebugPrivilege()
+	return source{users: &accounts{}}
+}
+
+// dropDebugPrivilege undoes what importing gopsutil enables for administrators.
+func dropDebugPrivilege() {
+	var token windows.Token
+	if windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ADJUST_PRIVILEGES, &token) != nil {
+		return
+	}
+	defer token.Close()
+	privileges := windows.Tokenprivileges{PrivilegeCount: 1}
+	name, err := windows.UTF16PtrFromString("SeDebugPrivilege")
+	if err == nil && windows.LookupPrivilegeValue(nil, name, &privileges.Privileges[0].Luid) == nil {
+		_ = windows.AdjustTokenPrivileges(token, false, &privileges, 0, nil, nil)
+	}
+}
 
 // scan joins socket tables with processes that are older than their sockets.
 func (s source) scan(ctx context.Context) (domain.Snapshot, error) {
@@ -53,10 +70,10 @@ func (s source) scan(ctx context.Context) (domain.Snapshot, error) {
 	}
 	services, isSCMKnown := readServices()
 	snapshot := domain.Snapshot{Host: host(), Processes: map[int]domain.Process{}}
-	for pid, entry := range tree {
-		snapshot.Processes[pid] = basicProcess(pid, entry)
+	for pid := range tree {
+		snapshot.Processes[pid] = basicProcess(pid, tree)
 	}
-	s.addDetails(ctx, &snapshot, found, services, isSCMKnown)
+	s.addDetails(ctx, &snapshot, found, func(pid int) domain.Tri { return serviceState(pid, tree, services, isSCMKnown) })
 	for _, socket := range found {
 		snapshot.Sockets = append(snapshot.Sockets, attribute(snapshot, socket, tables))
 	}
@@ -142,42 +159,66 @@ func readTable(call *windows.LazyProc, family, class uintptr) ([]byte, error) {
 	return nil, windows.ERROR_INSUFFICIENT_BUFFER
 }
 
-// treeEntry is one process in the system snapshot.
+// treeEntry is one process in the system's own list.
 type treeEntry struct {
-	parent int
-	name   string
+	parent  int
+	name    string
+	start   uint64
+	session uint32
 }
 
-// readTree lists every process and its recorded parent.
+// readTree lists every process in one call, without opening any of them.
 func readTree() (map[int]treeEntry, error) {
-	handle, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
-	if err != nil {
-		return nil, err
+	size := uint32(1 << 20)
+	for range maxTableAttempts {
+		// uint64 backing keeps the buffer 8-byte aligned
+		buffer := make([]uint64, size/8)
+		var needed uint32
+		err := windows.NtQuerySystemInformation(windows.SystemProcessInformation, unsafe.Pointer(&buffer[0]), size, &needed)
+		if errors.Is(err, windows.STATUS_INFO_LENGTH_MISMATCH) {
+			size = max(size*2, needed+64<<10)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return parseTree(unsafe.Pointer(&buffer[0]), uintptr(size)), nil
 	}
-	defer windows.CloseHandle(handle)
+	return nil, windows.STATUS_INFO_LENGTH_MISMATCH
+}
+
+// parseTree walks the linked records inside the buffer.
+func parseTree(base unsafe.Pointer, size uintptr) map[int]treeEntry {
 	tree := map[int]treeEntry{}
-	entry := windows.ProcessEntry32{Size: uint32(unsafe.Sizeof(windows.ProcessEntry32{}))}
-	for err = windows.Process32First(handle, &entry); err == nil; err = windows.Process32Next(handle, &entry) {
-		tree[int(entry.ProcessID)] = treeEntry{int(entry.ParentProcessID), windows.UTF16ToString(entry.ExeFile[:])}
+	for offset := uintptr(0); offset+unsafe.Sizeof(windows.SYSTEM_PROCESS_INFORMATION{}) <= size; {
+		entry := (*windows.SYSTEM_PROCESS_INFORMATION)(unsafe.Add(base, offset))
+		tree[int(entry.UniqueProcessID)] = treeEntry{
+			parent: int(entry.InheritedFromUniqueProcessID), name: entry.ImageName.String(),
+			start: uint64(entry.CreateTime), session: entry.SessionID,
+		}
+		if entry.NextEntryOffset == 0 {
+			break
+		}
+		offset += uintptr(entry.NextEntryOffset)
 	}
-	if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
-		return nil, err
-	}
-	return tree, nil
+	return tree
 }
 
 // basicProcess fills what does not need a handle. Windows has no signals.
-func basicProcess(pid int, entry treeEntry) domain.Process {
+func basicProcess(pid int, tree map[int]treeEntry) domain.Process {
+	entry := tree[pid]
 	found := domain.Process{
 		Name: entry.name, Kernel: pid <= systemPID, Sockets: domain.Complete, TTY: domain.Unknown,
 		Caught: domain.No, Ignored: domain.No, Blocked: domain.No,
 		Unit: domain.Unit{Kind: domain.UnitNone}, Job: domain.Job{Known: true},
 	}
 	found.PID = pid
-	if handle, err := openQuery(pid); err == nil {
-		found.Start = startTime(handle)
-		found.PPID = trustedParent(entry.parent, found.Start)
-		_ = windows.CloseHandle(handle)
+	if entry.start != 0 {
+		found.Start = strconv.FormatUint(entry.start, 10)
+	}
+	// A parent ID may have been reused by a younger process
+	if parent, known := tree[entry.parent]; known && parent.start < entry.start {
+		found.PPID = entry.parent
 	}
 	return found
 }
@@ -187,23 +228,8 @@ func openQuery(pid int) (windows.Handle, error) {
 	return windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 }
 
-// trustedParent rejects parent IDs that were reused by a younger process.
-func trustedParent(pid int, childStart string) int {
-	handle, err := openQuery(pid)
-	if err != nil {
-		return 0
-	}
-	defer windows.CloseHandle(handle)
-	parent, errParent := strconv.ParseUint(startTime(handle), 10, 64)
-	child, errChild := strconv.ParseUint(childStart, 10, 64)
-	if errParent != nil || errChild != nil || parent >= child {
-		return 0
-	}
-	return pid
-}
-
 // addDetails reads owners, their ancestors and Portly fully.
-func (s source) addDetails(ctx context.Context, snapshot *domain.Snapshot, sockets []winSocket, services map[int]string, isSCMKnown bool) {
+func (s source) addDetails(ctx context.Context, snapshot *domain.Snapshot, sockets []winSocket, service func(int) domain.Tri) {
 	relevant := map[int]bool{}
 	mark := func(pid int) {
 		relevant[pid] = true
@@ -221,7 +247,7 @@ func (s source) addDetails(ctx context.Context, snapshot *domain.Snapshot, socke
 		if !known || ctx.Err() != nil {
 			continue
 		}
-		found.Service = serviceState(pid, services, isSCMKnown)
+		found.Service = service(pid)
 		snapshot.Processes[pid] = s.detail(ctx, found)
 	}
 }
@@ -287,10 +313,13 @@ func tokenUser(handle windows.Handle) string {
 // debuggerState is unknown when the process can't be asked.
 func debuggerState(pid int) domain.Tri {
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION, false, uint32(pid))
-	if err != nil || checkDebugger.Find() != nil {
+	if err != nil {
 		return domain.Unknown
 	}
 	defer windows.CloseHandle(handle)
+	if checkDebugger.Find() != nil {
+		return domain.Unknown
+	}
 	var isPresent int32
 	result, _, _ := checkDebugger.Call(uintptr(handle), uintptr(unsafe.Pointer(&isPresent)))
 	if result == 0 {
@@ -300,15 +329,14 @@ func debuggerState(pid int) domain.Tri {
 }
 
 // serviceState covers services and session 0, unknown without the service manager.
-func serviceState(pid int, services map[int]string, isSCMKnown bool) domain.Tri {
-	var session uint32
+func serviceState(pid int, tree map[int]treeEntry, services map[int]string, isSCMKnown bool) domain.Tri {
 	switch {
 	case services[pid] != "":
 		return domain.Yes
-	case windows.ProcessIdToSessionId(uint32(pid), &session) != nil || !isSCMKnown:
+	case !isSCMKnown:
 		return domain.Unknown
 	}
-	return domain.TriOf(session == 0)
+	return domain.TriOf(tree[pid].session == 0)
 }
 
 // readServices maps PIDs to service names, false when it can't be read.

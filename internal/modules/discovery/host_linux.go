@@ -37,10 +37,23 @@ func (s source) inContainer(host domain.Host, own cgroupInfo) domain.Tri {
 	switch {
 	case host.SelfContainer != "" || hasMarker:
 		return domain.Yes
-	case host.ServiceManager == domain.Yes || own.unit.Kind >= domain.UnitService:
+	case host.ServiceManager == domain.Yes || own.unit.Kind >= domain.UnitService || s.isInitialNamespace():
 		return domain.No
 	}
 	return domain.Unknown
+}
+
+// Fixed inodes of the kernel's first namespaces
+const (
+	initialPIDNamespace    = "pid:[4026531836]"
+	initialCgroupNamespace = "cgroup:[4026531835]"
+)
+
+// isInitialNamespace proves this is no container, also without systemd.
+func (s source) isInitialNamespace() bool {
+	pid, errPID := os.Readlink(filepath.Join(s.root, "self/ns/pid"))
+	cgroup, errCgroup := os.Readlink(filepath.Join(s.root, "self/ns/cgroup"))
+	return errPID == nil && errCgroup == nil && pid == initialPIDNamespace && cgroup == initialCgroupNamespace
 }
 
 // exists reports whether a path is there.
