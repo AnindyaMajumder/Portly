@@ -218,7 +218,7 @@ func stop(t *testing.T, args ...string) result {
 func (r result) expect(t *testing.T, exit int, status string) {
 	t.Helper()
 	if r.exit != exit || len(r.json.Results) == 0 || r.json.Results[0].Status != status {
-		t.Errorf("exit %d, want %d %s\n%s%s", r.exit, exit, status, r.stdout, r.stderr)
+		t.Fatalf("exit %d, want %d %s\n%s%s", r.exit, exit, status, r.stdout, r.stderr)
 	}
 }
 
