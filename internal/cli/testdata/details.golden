@@ -1,0 +1,56 @@
+Port       22/tcp
+Project    Unknown
+Process    Permission denied
+User       root
+Address    0.0.0.0:22
+Run portly as administrator to see the owner
+
+Port       5353/udp
+Project    Unknown
+Process    Unknown owner
+Address    0.0.0.0:5353
+Run 'portly stop 5353/udp' to stop it
+
+Port       5432/tcp
+Project    shop  (high: compose label)
+Container  shop-db-1  (shop / db)
+Image      postgres:18
+Directory  ~/shop
+Engine     Docker
+Address    127.0.0.1:5432
+Run 'portly stop 5432' to stop it
+
+Port       6000/tcp
+Project    Unknown
+Container  cache
+Image      sha256:ffffffffffff
+Engine     Podman, not proven to run on this machine
+Address    published by the engine, no host socket
+Run 'portly stop 6000' to stop it
+
+Port       8000/tcp
+Project    shop  (high: pyproject.toml)
+Directory  ~/shop
+Process    uvicorn (PID 6182)
+Command    uvicorn main:app --token ***
+User       dev
+Workers    6190, 6191
+Address    127.0.0.1:8000, [::1]:8000
+Run 'portly stop 8000' to stop it
+
+Port       9000/tcp
+Project    shop  (high: pyproject.toml)
+Directory  ~/shop
+Process    uvicorn (PID 6182)
+Command    uvicorn main:app --token ***
+User       dev
+Workers    6190, 6191
+Address    127.0.0.1:8000, [::1]:8000
+
+Project    Unknown
+Process    other (PID 7000)
+User       dev
+Address    192.168.1.2:9000
+Several owners share this port, so portly will not stop it
+
+Port 9999 is free.

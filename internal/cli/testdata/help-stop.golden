@@ -1,0 +1,22 @@
+Shows exactly what would stop, asks, stops it gracefully and checks the port is free. A bare port means TCP.
+
+Usage:
+  portly stop <port> ... [flags]
+
+Examples:
+  portly stop 8000                  ask, then stop
+  portly stop 3000 8000             several, one question
+  portly stop 5353/udp              a UDP port
+  portly stop 8000 --yes            do not ask
+  portly stop 8000 --force          graceful first, then ask again and kill
+  portly stop 8000 --json           show the targets and a plan_id, stop nothing
+
+Flags:
+      --expect string   stop only if the targets match this plan_id
+      --force           kill if a graceful stop fails, after asking again
+  -h, --help            help for stop
+  -y, --yes             do not ask, every check still runs
+
+Global Flags:
+      --json      print one JSON document
+      --verbose   print diagnostics on stderr

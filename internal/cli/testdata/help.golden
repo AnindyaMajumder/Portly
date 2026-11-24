@@ -1,0 +1,26 @@
+Portly shows what uses local TCP and UDP ports, which project it belongs to, and stops it safely.
+
+Usage:
+  portly [port ...] [flags]
+  portly [command]
+
+Examples:
+  portly                    list ports
+  portly 8000               details for a port
+  portly 8000/udp           only UDP
+  portly stop 8000          stop it, after asking
+  portly --json             for scripts and agents
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
+  stop        Stop what uses a port, after showing it and asking
+
+Flags:
+      --all       also list likely-client UDP ports
+  -h, --help      help for portly
+      --json      print one JSON document
+      --verbose   print diagnostics on stderr
+  -v, --version   version for portly
+
+Use "portly [command] --help" for more information about a command.

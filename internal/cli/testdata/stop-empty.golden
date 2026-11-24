@@ -1,0 +1,12 @@
+stdout:
+stderr:
+Project    shop
+Process    uvicorn (PID 6182)
+Directory  ~/shop
+  ! also closes [::1]:9000/tcp
+  ! 2 processes share the port
+  ! child processes: uvicorn (PID 6182)
+  ! suspended, will be resumed to stop
+  ! runs under a reloader, which may start it again
+Stop this process? [y/N] Error: Cancelled
+Nothing was stopped

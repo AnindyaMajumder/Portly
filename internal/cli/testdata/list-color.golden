@@ -1,0 +1,9 @@
+[90mPORT  PROTO  PROJECT  TYPE    PID   PROCESS            ADDRESS        DIRECTORY[m
+[34m22  [m  tcp    [90mUnknown[m  Native  [90m—   [m  [33mPermission denied[m  0.0.0.0        [90m—        [m
+[34m5353[m  udp    [90mUnknown[m  Native  [90m—   [m  Unknown owner      0.0.0.0        [90m—        [m
+[34m5432[m  tcp    shop     Docker  [90m—   [m  shop-db-1          127.0.0.1      ~/shop   
+[34m6000[m  tcp    [90mUnknown[m  Podman  [90m—   [m  cache              [90m—            [m  [90m—        [m
+[34m8000[m  tcp    shop     Python  6182  uvicorn            127.0.0.1 ::1  ~/shop   
+[34m9000[m  tcp    shop     Python  6182  uvicorn            127.0.0.1 ::1  ~/shop   
+[34m9000[m  tcp    [90mUnknown[m  Native  7000  other              192.168.1.2    [90m—        [m
+[90m6 ports found · 3 UDP hidden (portly --all) · Run 'portly 5432' for details[m

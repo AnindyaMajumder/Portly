@@ -15,6 +15,9 @@ const (
 	stopEngineDeadline = 3 * time.Second
 )
 
+// Confirm asks the user again before a force kill.
+type Confirm = stopper.Confirm
+
 // Scanner sees sockets and processes.
 type Scanner interface {
 	Scan(ctx context.Context) (domain.Snapshot, error)
