@@ -74,7 +74,8 @@ func TestDockerInsideAsRoot(t *testing.T) {
 func TestDockerOtherNetwork(t *testing.T) {
 	needsDocker(t)
 	s := start(t, "tcp")
-	script := `trap "exit 0" TERM; nc -lk -p ` + s.ports[0] + ` & sleep 45 & wait`
+	// Ends by itself, and takes the listener with it
+	script := "exec timeout 45 nc -lk -p " + s.ports[0]
 	output, err := exec.Command("docker", "run", "-d", "--rm", "--pull=never", "--memory=64m", "--pids-limit=32",
 		"--label", "com.docker.compose.project=portly-test", image, "sh", "-c", script).Output()
 	if err != nil {
