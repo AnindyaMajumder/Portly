@@ -11,7 +11,7 @@ import (
 // TestReleaseGatesAreClosed changes only together with recorded evidence.
 func TestReleaseGatesAreClosed(t *testing.T) {
 	built := New(nil, nil)
-	if EvidenceBuild || built.gates.native || built.gates.docker || built.gates.podman || built.gates.guard != nil {
+	if EvidenceBuild || built.gates.native || built.gates.docker || built.gates.guard != nil {
 		t.Errorf("an unproven gate is open: %+v", built.gates)
 	}
 	request := domain.StopRequest{Endpoints: []domain.Endpoint{web}, Force: true}

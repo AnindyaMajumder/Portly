@@ -121,8 +121,22 @@ func (w *World) join(ctx context.Context, scan func(context.Context) (domain.Sna
 	select {
 	case found := <-answers:
 		snapshot.Engines, snapshot.EnginesSeen = found.engines, domain.Complete
+		snapshot.Warnings = append(snapshot.Warnings, slowEngines(found.engines)...)
 		return snapshot, found.notes, nil
 	case <-stuck.C:
-		return snapshot, []string{"Looking for container engines took too long"}, nil
+		snapshot.Warnings = append(snapshot.Warnings, engineWarning)
+		return snapshot, nil, nil
 	}
+}
+
+const engineWarning = "A container engine did not answer in time, its containers are missing"
+
+// slowEngines warns once, because a port may then show its forwarder instead.
+func slowEngines(engines []domain.Engine) []string {
+	for _, engine := range engines {
+		if engine.Answer == domain.AnswerTimeout {
+			return []string{engineWarning}
+		}
+	}
+	return nil
 }

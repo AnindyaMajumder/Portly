@@ -246,7 +246,7 @@ func TestSlowEnginesDoNotBlock(t *testing.T) {
 		world := NewWorld(&fakeScanner{snapshot: domain.Snapshot{Host: host}}, fakeEngines{delay: time.Hour})
 		started := time.Now()
 		snapshot, _, err := world.list(t.Context())
-		if err != nil || time.Since(started) != listEngineDeadline || snapshot.Engines[0].Answer != domain.AnswerTimeout {
+		if err != nil || time.Since(started) != listEngineDeadline || snapshot.Engines[0].Answer != domain.AnswerTimeout || len(snapshot.Warnings) != 1 {
 			t.Errorf("%v after %v, %+v", err, time.Since(started), snapshot.Engines)
 		}
 		started = time.Now()
@@ -270,9 +270,9 @@ func TestStuckEnginesAreNotSeen(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
 		world := NewWorld(&fakeScanner{}, stuckEngines{release})
-		snapshot, notes, err := world.list(t.Context())
-		if err != nil || snapshot.EnginesSeen != domain.Unavailable || len(notes) != 1 {
-			t.Errorf("%v %v %v", snapshot.EnginesSeen, notes, err)
+		snapshot, _, err := world.list(t.Context())
+		if err != nil || snapshot.EnginesSeen != domain.Unavailable || len(snapshot.Warnings) != 1 {
+			t.Errorf("%v %v %v", snapshot.EnginesSeen, snapshot.Warnings, err)
 		}
 		close(release)
 	})

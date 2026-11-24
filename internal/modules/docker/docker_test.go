@@ -344,6 +344,25 @@ func TestStopUsesNoTimeout(t *testing.T) {
 	}
 }
 
+// TestOnlyDockerIsStopped sends nothing to engines that may kill on t=-1.
+func TestOnlyDockerIsStopped(t *testing.T) {
+	for name, version := range map[string]string{
+		"podman": `{"Components":[{"Name":"Podman Engine"}]}`, "both": `{"Components":[{"Name":"Engine"},{"Name":"Podman Engine"}]}`,
+		"unknown": `{"Components":[{"Name":"Other"}]}`, "none": `{}`, "malformed": `{`,
+	} {
+		engine := newFakeEngine(t)
+		engine.version = version
+		for _, got := range []domain.Delivery{
+			engine.client().Stop(t.Context(), engine.approval(t, domain.Graceful)),
+			engine.client().ForceStop(t.Context(), engine.approval(t, domain.Forced)),
+		} {
+			if got.Accepted || got.Code != domain.CodeEngineRejected || len(engine.posts()) != 0 {
+				t.Errorf("%s: %+v after %v", name, got, engine.posts())
+			}
+		}
+	}
+}
+
 // TestForceStopKills sends exactly one kill.
 func TestForceStopKills(t *testing.T) {
 	engine := newFakeEngine(t)

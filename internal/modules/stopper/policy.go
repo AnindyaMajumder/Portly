@@ -11,7 +11,6 @@ import (
 type gates struct {
 	native   bool
 	docker   bool
-	podman   bool
 	graceful bool
 	families bool
 	// Evidence builds only act on what their test started
@@ -163,8 +162,7 @@ func isTainted(snapshot domain.Snapshot, target domain.StopTarget, owners map[in
 func isGateOpen(snapshot domain.Snapshot, candidate candidate, gates gates) bool {
 	isOpen := gates.native
 	if candidate.target.Kind == domain.KindContainer {
-		isEngineOpen := candidate.engine == "docker" && gates.docker || candidate.engine == "podman" && gates.podman
-		isOpen = gates.native && isEngineOpen
+		isOpen = gates.native && gates.docker && candidate.engine == "docker"
 	}
 	return isOpen && (gates.guard == nil || gates.guard(snapshot, candidate))
 }

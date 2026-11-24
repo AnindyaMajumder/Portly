@@ -12,7 +12,11 @@ import (
 	"github.com/AnindyaMajumder/Portly/internal/domain"
 )
 
-const inspectWorkers = 8
+const (
+	inspectWorkers = 8
+	kindDocker     = "docker"
+	kindPodman     = "podman"
+)
 
 var containerID = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -50,17 +54,9 @@ type inspected struct {
 
 // list returns the engine kind and its running containers.
 func (a *api) list(ctx context.Context) (string, []domain.Container, domain.Answer) {
-	var version struct {
-		Components []struct{ Name string }
-	}
-	if err := a.get(ctx, "/version", &version); err != nil {
+	kind, err := a.kind(ctx)
+	if err != nil {
 		return "", nil, answerFor(err)
-	}
-	kind := "docker"
-	for _, component := range version.Components {
-		if strings.HasPrefix(component.Name, "Podman") {
-			kind = "podman"
-		}
 	}
 	var entries []listed
 	if err := a.get(ctx, "/containers/json", &entries); err != nil {
@@ -77,6 +73,26 @@ func (a *api) list(ctx context.Context) (string, []domain.Container, domain.Answ
 	addSharedNetworks(entries, containers)
 	a.inspectAll(ctx, containers)
 	return kind, containers, domain.AnswerOK
+}
+
+// kind names the engine, empty when it is neither Docker nor Podman.
+func (a *api) kind(ctx context.Context) (string, error) {
+	var version struct {
+		Components []struct{ Name string }
+	}
+	if err := a.get(ctx, "/version", &version); err != nil {
+		return "", err
+	}
+	kind := ""
+	for _, component := range version.Components {
+		switch {
+		case strings.HasPrefix(component.Name, "Podman"):
+			return kindPodman, nil
+		case component.Name == "Engine":
+			kind = kindDocker
+		}
+	}
+	return kind, nil
 }
 
 // container validates one listed entry.

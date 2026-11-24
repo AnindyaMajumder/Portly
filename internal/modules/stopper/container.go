@@ -87,6 +87,9 @@ func finishContainer(snapshot domain.Snapshot, result resolution, owner domain.P
 		return result.refuse(domain.CodeEngineUnresponsive)
 	case !container.Inspected || !container.Ref().Same(container.Ref()):
 		return result.refuse(domain.CodeEngineUnresponsive)
+	// Podman turns an endless timeout into an immediate kill
+	case owner.Engine.Kind != "docker":
+		return result.refuse(domain.CodeEngineRejected)
 	case container.Orchestrator != "":
 		return result.refuse(domain.CodeContainerManaged)
 	case !target.GracefulAvailable && !isForced:

@@ -563,8 +563,8 @@ func TestContainerGates(t *testing.T) {
 	published(&snapshot)
 	request := domain.StopRequest{Endpoints: []domain.Endpoint{web}}
 	for name, closed := range map[string]gates{
-		"platform": {docker: true, podman: true, graceful: true},
-		"engine":   {native: true, podman: true, graceful: true},
+		"platform": {docker: true, graceful: true},
+		"engine":   {native: true, graceful: true},
 	} {
 		if got := codeOf(decide(snapshot, request, closed)); got != domain.CodePlatform {
 			t.Errorf("%s gate closed: %q", name, got)

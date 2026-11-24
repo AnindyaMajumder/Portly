@@ -17,7 +17,7 @@ const testProject = "portly-test"
 
 // withEvidence opens the gates, but only for what the test started.
 func withEvidence(platform gates) gates {
-	platform.native, platform.docker, platform.podman, platform.guard = true, true, true, startedByTest
+	platform.native, platform.docker, platform.guard = true, true, startedByTest
 	return platform
 }
 

@@ -44,6 +44,10 @@ func (c *Client) act(ctx context.Context, target domain.StopTarget, action strin
 	defer api.close()
 	checkCtx, cancel := context.WithTimeout(ctx, connectDeadline)
 	defer cancel()
+	// Other engines may turn t=-1 into a kill
+	if kind, err := api.kind(checkCtx); err != nil || kind != kindDocker {
+		return domain.Delivery{Code: domain.CodeEngineRejected}
+	}
 	current, err := api.inspect(checkCtx, target.Container.ID)
 	if isStatus(err, http.StatusNotFound) {
 		return domain.Delivery{Code: domain.CodeChanged}

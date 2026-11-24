@@ -94,6 +94,8 @@ func TestContainerRefusals(t *testing.T) {
 		{"own container", func(s *domain.Snapshot) { s.Host.SelfContainer = dbID }, domain.CodeContainerSelf},
 		{"own container unknown", func(s *domain.Snapshot) { s.Host.InContainer = domain.Yes }, domain.CodeContainerSelf},
 		{"may be in a container", func(s *domain.Snapshot) { s.Host.InContainer = domain.Unknown }, domain.CodeContainerSelf},
+		{"podman", func(s *domain.Snapshot) { s.Engines[0].Kind = "podman" }, domain.CodeEngineRejected},
+		{"unknown engine", func(s *domain.Snapshot) { s.Engines[0].Kind = "" }, domain.CodeEngineRejected},
 		{"swarm", func(s *domain.Snapshot) { editContainer(s, func(c *domain.Container) { c.Orchestrator = "swarm" }) }, domain.CodeContainerManaged},
 		{"not inspected", func(s *domain.Snapshot) { editContainer(s, func(c *domain.Container) { c.Inspected = false }) }, domain.CodeEngineUnresponsive},
 		{"start unknown", func(s *domain.Snapshot) { editContainer(s, func(c *domain.Container) { c.StartedAt = "" }) }, domain.CodeEngineUnresponsive},
@@ -295,6 +297,19 @@ func TestContainerOnTwoPortsIsOneTarget(t *testing.T) {
 	plan := ask(snapshot, web, api)
 	if len(plan.Targets) != 1 || len(plan.Targets[0].Bindings) != 2 || len(plan.Targets[0].Other) != 0 {
 		t.Errorf("got %+v", plan)
+	}
+}
+
+// TestPodmanIsNeverStopped covers force too, because nothing graceful was delivered.
+func TestPodmanIsNeverStopped(t *testing.T) {
+	for _, kind := range []string{"podman", "", "other"} {
+		snapshot := world()
+		published(&snapshot)
+		snapshot.Engines[0].Kind = kind
+		plan := decide(snapshot, domain.StopRequest{Endpoints: []domain.Endpoint{web}, Force: true}, openGates)
+		if codeOf(plan) != domain.CodeEngineRejected || len(plan.Targets) != 0 {
+			t.Errorf("%q: %+v", kind, plan)
+		}
 	}
 }
 

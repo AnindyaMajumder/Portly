@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	openGates = gates{native: true, docker: true, podman: true, graceful: true, families: true}
+	openGates = gates{native: true, docker: true, graceful: true, families: true}
 	web       = domain.Endpoint{Port: 8000, Protocol: domain.TCP}
 	api       = domain.Endpoint{Port: 9000, Protocol: domain.TCP}
 	dbID      = strings.Repeat("d", 64)
