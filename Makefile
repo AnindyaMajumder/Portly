@@ -6,7 +6,7 @@ TARGETS := linux/386 linux/amd64 linux/arm linux/arm64 linux/riscv64 linux/ppc64
 export CGO_ENABLED ?= 0
 
 .DEFAULT_GOAL := help
-.PHONY: help build fmt vet arch test cross check
+.PHONY: help build fmt vet arch test e2e cross check
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-13s %s\n", $$1, $$2}'
@@ -25,6 +25,9 @@ arch: ## Architecture rules
 
 test: ## Unit tests with race detector
 	CGO_ENABLED=1 go test -race -count=1 ./internal/... ./cmd/...
+
+e2e: ## Real listeners and real stops, only of processes the tests start
+	go test -count=1 -p 1 -timeout 10m ./tests/e2e
 
 cross: ## Build every release target
 	@for target in $(TARGETS); do echo "build $$target"; GOOS=$${target%/*} GOARCH=$${target#*/} GOARM=6 \
