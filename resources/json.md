@@ -1,6 +1,6 @@
 # JSON output
 
-Every command accepts `--json` and prints exactly one document on stdout, errors included. The schema is [`schema/portly.v1.schema.json`](../schema/portly.v1.schema.json). Within 1.x fields are added, never changed or removed. Values that can't be read are `null`.
+List, lookup and stop accept `--json` and print exactly one document on stdout, errors included. `--help`, `--version` and `completion` always print text. The schema is [`schema/portly.v1.schema.json`](../schema/portly.v1.schema.json). Within 1.x fields are added, never changed or removed. Values that can't be read are `null`.
 
 | Command | Fields besides `schema_version`, `command`, `error`, `warnings` |
 |---|---|
@@ -8,7 +8,7 @@ Every command accepts `--json` and prints exactly one document on stdout, errors
 | `portly 8000 --json` | `ports` |
 | `portly stop 8000 --json` | `plan_id`, `targets`, `results` |
 
-`stop --json` never prompts. Without `--yes` it stops nothing, returns `confirmation_required` and a `plan_id`. Passing that id to `--expect` refuses the whole command if the targets have changed. The id is not a secret and authorizes nothing.
+`stop --json` never prompts. Without `--yes` it stops nothing, returns `confirmation_required` and a `plan_id`. If every port is refused, `error` and `plan_id` are `null` and the reasons are in `results[].error`. Passing that id to `--expect` refuses the whole command if the targets have changed. An empty or malformed id is a usage error. The id is not a secret and authorizes nothing.
 
 Each entry in `results` is one named port and points to a target by index. Each target lists the other endpoints and child processes it affects. After execution, `outcome` says what happened.
 

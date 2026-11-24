@@ -142,7 +142,7 @@ Intent-revealing names, early returns, one job per function (about 50 lines), no
 - No Viper, Docker SDK or cgo.
 - gopsutil is not used on Linux. Its start time depends on the wall clock and it honours a `HOST_PROC` override; both are unsafe for identity checks.
 - gopsutil is not used for sockets anywhere. It hides owners that can't be read.
-- The stop prompt is a plain `[y/N]` from the standard library. There is no terminal UI framework.
+- The stop prompt is a plain `[y/N]` from the standard library, and the force prompt asks for a word. There is no terminal UI framework.
 
 ## 5. Core model
 
@@ -325,7 +325,7 @@ UDP has no listening state, so a browser looks like a server. Portly says **boun
 - Endpoint order: `DOCKER_HOST`, `DOCKER_CONTEXT`, the active context, then known paths (default, rootless, Docker Desktop, Colima, OrbStack, Podman).
 - Remote engines are ignored, because their ports are not local.
 - Sockets must be owned by root or the caller. Responses are size-limited.
-- **A local socket does not prove a local engine:** it can be forwarded from another machine or mounted into a container. An engine is proven local on Linux when the container's init PID exists here and its cgroup carries that container's ID. An engine that can't be proven local this way (a VM on macOS, Windows or Linux) counts only for a port whose host socket is held by that engine's own forwarder, recognized by the engine's socket path and the program's name. Otherwise its containers are listed as unproven and can't be stopped.
+- **A local socket does not prove a local engine:** it can be forwarded from another machine or mounted into a container. An engine is proven local on Linux when the container's init PID exists here and its cgroup carries that container's ID. A host-network process belongs to a container only if its cgroup path is the same as that init process's, because any user can create a cgroup with that name. An engine that can't be proven local this way (a VM on macOS, Windows or Linux) counts only for a port whose host socket is held by that engine's own forwarder, recognized by the engine's socket path and the program's name. Otherwise its containers are listed as unproven and can't be stopped.
 - Limits: 400 ms for listing, 3 s to connect and inspect before a stop, 10 s to wait for the container to exit.
 - Only host-published ports are listed. Exposed-only ports are not.
 - Compose labels give the project, service and directory. Host-network containers are matched through the process's cgroup.
@@ -405,14 +405,14 @@ Blocking on every unreadable process would refuse every stop by a normal user, b
 
 ### Several ports
 
-One command makes one plan. All named ports are resolved, grouped by target and decided per target. The plan is shown and confirmed once. Each target is signalled at most once, one at a time, revalidated right before its own signal. A refused target does not block other targets. A process that is a possible owner of a refused port is refused for every named port.
+One command makes one plan. All named ports are resolved, grouped by target and decided per target. The plan is shown and confirmed once. Each target is signalled at most once, one at a time, revalidated right before its own signal. A refused target does not block other targets. A process that is a possible owner of a refused port is refused for every named port, and so is its parent.
 
 ### Expected target
 
 `portly stop <ports> --json` without `--yes` stops nothing and returns a `plan_id`. Passing it back with `--expect` makes the stop fail with `target_changed` if the plan differs.
 
 - The id is a truncated SHA-256 (128 bits) over the allowed targets: their identity, family members, named endpoints, other listening TCP and non-ephemeral UDP endpoints, and whether they are suspended or paused. Ephemeral UDP is left out because it changes constantly.
-- A mismatch refuses the whole command. Every normal check still runs.
+- A mismatch refuses the whole command. An empty or malformed id is a usage error. Every normal check still runs.
 - Before a force kill only target identity is compared, because the graceful stop may already have closed some sockets. The target must still hold at least one named socket, or be a running container.
 - It is not a secret and authorizes nothing.
 
@@ -474,7 +474,7 @@ A last resort for a process that ignores a graceful stop. It can lose unsaved da
 | Force kill | SIGKILL through the pidfd, or by PID on kernels without it | SIGKILL | `TerminateProcess` on the pinned handle | engine API `kill` |
 
 - Only `still_listening` by the target itself, or `pending`, continues to force. `draining`, `restarted`, `taken_over` and `unknown` are reported.
-- `--force` alone asks twice, or once when there is no graceful method. `--force --yes` asks nothing. `--yes` alone never kills. Scripts should add `--expect`.
+- `--force` alone asks twice, or once when there is no graceful method. The second question needs the word `kill`, so a `y` typed while waiting is not an answer. `--force --yes` asks nothing. `--yes` alone never kills. Scripts should add `--expect`.
 - Every refusal in the policy table still applies, apart from the two rows that name `--force`. Ambiguous, protected, supervised, forwarder and unresolved targets can't be forced.
 - If there is no graceful method (a native Windows process, a container whose stop signal is a force kill), `--force` goes straight to its confirmation. Nothing graceful was possible, and Portly says so.
 - **Families:** killing only the root would leave workers holding the port. Portly shows and pins every member that holds the socket, kills the root first, then the members still holding it. Processes that don't hold the socket are never killed. If the root already exited, its workers are not killed, because the confirmed root can no longer be verified.
@@ -624,7 +624,7 @@ Stopping is enabled on a platform only after its gate passes there. Until then s
 |---|---|
 | Linux | Families (gunicorn, `uvicorn --reload`, node cluster) and reloaders (Django, Flask) with real servers; behaviour without pidfd, without systemd, with restricted `/proc`, and in other namespaces |
 | macOS | The `lsof` and `netstat` cross-check finds hidden owners across users, shared sockets and overlapping addresses; a stable socket id exists; launchd domains can be read and jobs are told apart from applications |
-| Windows | Bind time detects reused PIDs, with a creation time close to the bind time treated as unresolved; the pinned handle is the process that is terminated |
+| Windows | A socket inherited by a child is not attributed to a parent alone; bind time detects reused PIDs, with a creation time close to the bind time treated as unresolved; the pinned handle is the process that is terminated |
 | Docker, Podman | `t=-1` never escalates, engines that reject it are refused, locality is proven, and the proxy, no-proxy and routed modes resolve as in section 9 |
 
 | # | Point | Resolution |

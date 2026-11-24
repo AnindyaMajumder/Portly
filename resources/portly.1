@@ -10,6 +10,7 @@ portly \- see what uses your ports, and stop it safely
 .B portly
 .IR port " ..."
 .RB [ \-\-json ]
+.RB [ \-\-verbose ]
 .br
 .B portly stop
 .IR port " ..."
@@ -18,6 +19,10 @@ portly \- see what uses your ports, and stop it safely
 .RB [ \-\-expect
 .IR plan-id ]
 .RB [ \-\-json ]
+.RB [ \-\-verbose ]
+.br
+.B portly completion
+.IR shell
 .SH DESCRIPTION
 Lists local TCP and UDP ports, the process or container behind each, and the project it belongs to.
 .B stop
@@ -25,6 +30,7 @@ shows exactly what would stop, asks, stops it gracefully and checks that the por
 A bare port means TCP. Use
 .IB port /udp
 to stop a UDP owner.
+Stopping is enabled only on platforms whose tests have passed. Elsewhere it is refused.
 .SH OPTIONS
 .TP
 .B \-\-all
@@ -41,7 +47,7 @@ it stops nothing and returns a plan id.
 Do not ask. Every check still runs.
 .TP
 .B \-\-force
-If a graceful stop was delivered and failed, ask again and kill. Unsaved data can be lost.
+If a graceful stop was delivered and failed, ask for the word kill, then kill. Unsaved data can be lost.
 .TP
 .BI \-\-expect " plan-id"
 Stop only if the targets are the ones inspected earlier.
@@ -83,6 +89,9 @@ Several ports with different outcomes.
 .TP
 .B NO_COLOR
 Disables colour.
+.TP
+.B TERM
+The value dumb disables colour.
 .TP
 .BR DOCKER_HOST ", " DOCKER_CONTEXT
 Used to find a local container engine. Remote engines are ignored.
