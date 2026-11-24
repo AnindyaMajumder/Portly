@@ -117,6 +117,27 @@ func TestDockerNextToAClosedEngine(t *testing.T) {
 	stop(t, s.ports[0]).expect(t, 0, "stopped")
 }
 
+// TestDockerRouted covers a network mode without host sockets.
+func TestDockerRouted(t *testing.T) {
+	network := os.Getenv("PORTLY_ROUTED_NETWORK")
+	if network == "" {
+		t.Skip("gate not proven here: set PORTLY_ROUTED_NETWORK")
+	}
+	c := runContainer(t, "portly-test", obedient, "--network="+network)
+	got := stop(t, c.port)
+	t.Logf("exit %d\n%s", got.exit, got.stdout)
+	if got.exit == 3 {
+		if !c.running() {
+			t.Error("not listening, yet the container is gone")
+		}
+		return
+	}
+	got.expect(t, 0, "stopped")
+	if c.running() || got.json.Targets[0].Kind != "container" {
+		t.Errorf("running %v, %+v", c.running(), got.json.Targets[0])
+	}
+}
+
 // TestDockerIgnoredStopIsPending proves t=-1 never ends in a kill.
 func TestDockerIgnoredStopIsPending(t *testing.T) {
 	c := runContainer(t, "portly-test", stubborn)

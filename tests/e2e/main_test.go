@@ -45,7 +45,15 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "subreaper:", err)
 		os.Exit(1)
 	}
+	if ready := os.Getenv(binVariable); ready != "" {
+		release, evidence = filepath.Join(ready, "portly"), filepath.Join(ready, "portly-evidence")
+		os.Exit(m.Run())
+	}
 	dir, err := os.MkdirTemp("", "portly-e2e")
+	// Containers of the tests run as other users
+	if err == nil {
+		err = os.Chmod(dir, 0o755)
+	}
 	if err == nil {
 		release, err = build(dir, "portly")
 	}
