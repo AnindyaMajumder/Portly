@@ -93,7 +93,7 @@ jobs:
       - name: End to end, gate and containers
         run: >
           sudo -E env "PATH=$PATH" systemd-run --scope --quiet
-          --uid="$(id -u)" --gid="$(id -g)" make e2e docker-test perf
+          setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups make e2e docker-test perf
 
   distros:
     runs-on: ubuntu-24.04
