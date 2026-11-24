@@ -73,14 +73,23 @@ func engineProblem(snapshot domain.Snapshot, process domain.Process) domain.Code
 
 // hasSilentEngine finds an engine of this user that could own the port.
 func hasSilentEngine(snapshot domain.Snapshot, userID string) bool {
-	for _, engine := range snapshot.Engines {
-		isSilent := engine.Answer == domain.AnswerTimeout || engine.Answer == domain.AnswerMalformed ||
-			engine.Answer == domain.AnswerUnobserved || engine.Answer == domain.AnswerDenied
-		if isSilent && (engine.OwnerUID == "" || engine.OwnerUID == userID) {
-			return true
-		}
-	}
-	return false
+	return hasEngine(snapshot, userID, slices.Concat(unanswered, []domain.Answer{domain.AnswerDenied}))
+}
+
+// hasUnansweredEngine leaves out engines this caller may not ask at all.
+func hasUnansweredEngine(snapshot domain.Snapshot, userID string) bool {
+	return hasEngine(snapshot, userID, unanswered)
+}
+
+// Answers of an engine that could be asked and said nothing usable
+var unanswered = []domain.Answer{domain.AnswerTimeout, domain.AnswerMalformed, domain.AnswerUnobserved}
+
+// hasEngine finds an engine of this user, or of an unknown one, by its answer.
+func hasEngine(snapshot domain.Snapshot, userID string, answers []domain.Answer) bool {
+	return slices.ContainsFunc(snapshot.Engines, func(engine domain.Engine) bool {
+		isTheirs := engine.OwnerUID == "" || engine.OwnerUID == userID
+		return isTheirs && slices.Contains(answers, engine.Answer)
+	})
 }
 
 // descendantProblem blocks when a child's sockets could not be read.

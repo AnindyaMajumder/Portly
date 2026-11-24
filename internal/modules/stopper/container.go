@@ -15,10 +15,12 @@ func resolvePublished(snapshot domain.Snapshot, result resolution, sockets []dom
 		return result.refuse(domain.CodeAmbiguous)
 	}
 	owner := publishers[0]
-	if hasSilentEngine(snapshot, owner.Engine.OwnerUID) {
+	isLocal := snapshot.ProvenLocal(owner.Container)
+	// A closed engine of the same user can't own what a proven container publishes
+	isUnclear := hasUnansweredEngine(snapshot, owner.Engine.OwnerUID) || !isLocal && hasSilentEngine(snapshot, owner.Engine.OwnerUID)
+	if isUnclear {
 		return result.refuse(domain.CodeEngineUnresponsive)
 	}
-	isLocal := snapshot.ProvenLocal(owner.Container)
 	bindings := owner.Container.Publishes(result.endpoint)
 	for _, socket := range sockets {
 		if !isExplained(snapshot, owner.Engine, bindings, socket, isLocal) {

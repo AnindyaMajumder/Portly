@@ -173,6 +173,29 @@ func TestSilentEngineBlocksPublishedPorts(t *testing.T) {
 	}
 }
 
+// TestClosedEngineDoesNotBlockAProvenContainer covers Docker next to root's Podman.
+func TestClosedEngineDoesNotBlockAProvenContainer(t *testing.T) {
+	build := func(answer domain.Answer) domain.Snapshot {
+		snapshot := world()
+		published(&snapshot)
+		snapshot.Engines = append(snapshot.Engines, domain.Engine{ID: "/run/podman/podman.sock", OwnerUID: "0", Answer: answer})
+		return snapshot
+	}
+	if got := codeOf(ask(build(domain.AnswerDenied), web)); got != "" {
+		t.Errorf("closed: %q", got)
+	}
+	for _, answer := range []domain.Answer{domain.AnswerTimeout, domain.AnswerMalformed, domain.AnswerUnobserved} {
+		if got := codeOf(ask(build(answer), web)); got != domain.CodeEngineUnresponsive {
+			t.Errorf("%v: %q", answer, got)
+		}
+	}
+	unproven := build(domain.AnswerDenied)
+	delete(unproven.Processes, initPID)
+	if got := codeOf(ask(unproven, web)); got != domain.CodeEngineUnresponsive {
+		t.Errorf("unproven next to a closed engine: %q", got)
+	}
+}
+
 // TestSameContainerFromTwoSocketsIsOne covers two paths to one engine.
 func TestSameContainerFromTwoSocketsIsOne(t *testing.T) {
 	snapshot := world()

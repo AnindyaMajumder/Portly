@@ -162,6 +162,20 @@ func TestReplacedContainerIsNotSuccess(t *testing.T) {
 	}
 }
 
+// TestClosedEngineDoesNotHideSuccess covers Docker next to root's Podman.
+func TestClosedEngineDoesNotHideSuccess(t *testing.T) {
+	l := containerLab()
+	closed := domain.Engine{ID: "/run/podman/podman.sock", OwnerUID: "0", Answer: domain.AnswerDenied}
+	l.world.snapshot.Engines = append(l.world.snapshot.Engines, closed)
+	l.engine.onStop = func(e *fakeEngine) {
+		gone(e)
+		e.lab.world.snapshot.Engines = append(e.lab.world.snapshot.Engines, closed)
+	}
+	if outcome := l.stop(t, false, nil, web); outcome.Code != "" {
+		t.Errorf("got %+v", outcome)
+	}
+}
+
 // TestFirstForceStopChecksReach covers a kill with no graceful stop before it.
 func TestFirstForceStopChecksReach(t *testing.T) {
 	for name, edit := range map[string]func(*domain.Container){

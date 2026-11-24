@@ -63,7 +63,7 @@ func (s *Stopper) verifyContainer(ctx context.Context, planned domain.StopTarget
 // replacement finds a new container on the same port, which may have no host socket.
 func (s *Stopper) replacement(ctx context.Context, planned domain.StopTarget, before domain.Snapshot) domain.Code {
 	now, err := s.world.Observe(ctx, endpointsOf(planned))
-	if err != nil || now.EnginesSeen != domain.Complete || hasSilentEngine(now, ownerOfEngine(before, planned.Container.Engine)) {
+	if err != nil || now.EnginesSeen != domain.Complete || hasUnansweredEngine(now, ownerOfEngine(before, planned.Container.Engine)) {
 		return domain.CodeUnknownOutcome
 	}
 	for _, endpoint := range endpointsOf(planned) {
