@@ -109,6 +109,33 @@ jobs:
           sudo -E env "PATH=$PATH" systemd-run --scope --quiet
           setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups make e2e docker-test perf
 
+  # Environments that change the machine, see tests/gate.sh
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+      - run: docker pull -q redis:7-alpine
+      - if: "!cancelled()"
+        run: ./tests/gate.sh podman
+      - if: "!cancelled() && matrix.os == 'ubuntu-24.04'"
+        run: ./tests/gate.sh hidden-proc
+      - if: "!cancelled() && matrix.os == 'ubuntu-24.04'"
+        run: ./tests/gate.sh root
+      - if: "!cancelled() && matrix.os != 'ubuntu-22.04'"
+        run: ./tests/gate.sh routed
+      - if: "!cancelled() && matrix.os != 'ubuntu-22.04'"
+        run: ./tests/gate.sh no-proxy
+
   distros:
     runs-on: ubuntu-24.04
     steps:
