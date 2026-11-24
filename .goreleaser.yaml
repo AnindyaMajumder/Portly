@@ -1,0 +1,73 @@
+version: 2
+
+project_name: portly
+
+before:
+  hooks:
+    - mkdir -p dist-extra
+    - sh -c "go run ./cmd/portly completion bash > dist-extra/portly.bash"
+    - sh -c "go run ./cmd/portly completion zsh > dist-extra/portly.zsh"
+    - sh -c "go run ./cmd/portly completion fish > dist-extra/portly.fish"
+
+builds:
+  - main: ./cmd/portly
+    binary: portly
+    env: [CGO_ENABLED=0, GOFLAGS=]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos: [linux, darwin, windows]
+    goarch: ["386", amd64, arm, arm64, riscv64, ppc64le, s390x]
+    goarm: ["6", "7"]
+    ignore:
+      - { goos: darwin, goarch: "386" }
+      - { goos: darwin, goarch: arm }
+      - { goos: darwin, goarch: riscv64 }
+      - { goos: darwin, goarch: ppc64le }
+      - { goos: darwin, goarch: s390x }
+      - { goos: windows, goarch: arm }
+      - { goos: windows, goarch: riscv64 }
+      - { goos: windows, goarch: ppc64le }
+      - { goos: windows, goarch: s390x }
+    hooks:
+      # A build tag could open an evidence gate
+      post:
+        - sh -c "! go version -m '{{ .Path }}' | grep -q -- '-tags'"
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [LICENSE, README.md, CHANGELOG.md, resources/portly.1, dist-extra/*]
+
+nfpms:
+  - id: packages
+    maintainer: Portly maintainers <noreply@github.com>
+    description: See what uses your ports, and stop it safely
+    homepage: https://github.com/AnindyaMajumder/Portly
+    license: MIT
+    formats: [deb, rpm, apk, archlinux]
+    contents:
+      - { src: resources/portly.1, dst: /usr/share/man/man1/portly.1 }
+      - { src: dist-extra/portly.bash, dst: /usr/share/bash-completion/completions/portly }
+      - { src: dist-extra/portly.zsh, dst: /usr/share/zsh/site-functions/_portly }
+      - { src: dist-extra/portly.fish, dst: /usr/share/fish/vendor_completions.d/portly.fish }
+      - { src: LICENSE, dst: /usr/share/doc/portly/LICENSE }
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: [sign-blob, --yes, "--bundle=${signature}", "${artifact}"]
+
+changelog:
+  use: git
+  filters:
+    exclude: ["^test:", "^chore:", "^ci:"]

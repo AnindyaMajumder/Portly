@@ -33,6 +33,7 @@ go.work.sum
 # Build output & Harness
 /portly
 /dist/
+/dist-extra/
 /bin/
 CLAUDE.md
 .claude/

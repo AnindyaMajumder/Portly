@@ -546,3 +546,24 @@ func FuzzArguments(f *testing.F) {
 		}
 	})
 }
+
+// TestManPageCoversEveryFlag keeps the manual complete.
+func TestManPageCoversEveryFlag(t *testing.T) {
+	data, err := os.ReadFile("../../resources/portly.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manual := strings.ReplaceAll(string(data), `\-`, "-")
+	for _, name := range []string{"help", "help-stop"} {
+		help, err := os.ReadFile(filepath.Join("testdata", name+".golden"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for word := range strings.FieldsSeq(string(help)) {
+			word = strings.TrimRight(word, `".`)
+			if strings.HasPrefix(word, "--") && !strings.Contains(manual, word) {
+				t.Errorf("%s is missing from the manual", word)
+			}
+		}
+	}
+}

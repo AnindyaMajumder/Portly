@@ -10,7 +10,7 @@ TARGETS := linux/386 linux/amd64 linux/arm linux/arm64 linux/riscv64 linux/ppc64
 export CGO_ENABLED ?= 0
 
 .DEFAULT_GOAL := help
-.PHONY: help build fmt vet arch test cover lint vuln fuzz e2e docker-test distro-test perf cycles cross check check-all
+.PHONY: snapshot help build fmt vet arch test cover lint vuln fuzz e2e docker-test distro-test perf cycles cross check check-all
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-13s %s\n", $$1, $$2}'
@@ -58,6 +58,9 @@ lint: ## Staticcheck on every OS
 vuln: ## Known vulnerabilities
 	GOBIN=$(TOOLS) go install $(GOVULNCHECK)
 	$(TOOLS)/govulncheck ./...
+
+snapshot: ## Local release build with an installed GoReleaser, publishes nothing
+	goreleaser release --snapshot --clean --skip=sign,sbom
 
 cross: ## Build every release target
 	@for target in $(TARGETS); do echo "build $$target"; GOOS=$${target%/*} GOARCH=$${target#*/} GOARM=6 \

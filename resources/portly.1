@@ -1,0 +1,95 @@
+.TH PORTLY 1 "" "" "User Commands"
+.SH NAME
+portly \- see what uses your ports, and stop it safely
+.SH SYNOPSIS
+.B portly
+.RB [ \-\-all ]
+.RB [ \-\-json ]
+.RB [ \-\-verbose ]
+.br
+.B portly
+.IR port " ..."
+.RB [ \-\-json ]
+.br
+.B portly stop
+.IR port " ..."
+.RB [ \-\-yes ]
+.RB [ \-\-force ]
+.RB [ \-\-expect
+.IR plan-id ]
+.RB [ \-\-json ]
+.SH DESCRIPTION
+Lists local TCP and UDP ports, the process or container behind each, and the project it belongs to.
+.B stop
+shows exactly what would stop, asks, stops it gracefully and checks that the port is free.
+A bare port means TCP. Use
+.IB port /udp
+to stop a UDP owner.
+.SH OPTIONS
+.TP
+.B \-\-all
+Also list likely-client UDP ports.
+.TP
+.B \-\-json
+Print one JSON document. Never prompts. With
+.B stop
+and without
+.B \-\-yes
+it stops nothing and returns a plan id.
+.TP
+.BR \-y ", " \-\-yes
+Do not ask. Every check still runs.
+.TP
+.B \-\-force
+If a graceful stop was delivered and failed, ask again and kill. Unsaved data can be lost.
+.TP
+.BI \-\-expect " plan-id"
+Stop only if the targets are the ones inspected earlier.
+.TP
+.B \-\-verbose
+Print diagnostics on standard error.
+.TP
+.BR \-h ", " \-\-help ", " \-v ", " \-\-version
+Print help or the version.
+.SH EXIT STATUS
+.TP
+.B 0
+Success, including a lookup of a free port.
+.TP
+.B 1
+Internal error.
+.TP
+.B 2
+Bad usage.
+.TP
+.B 3
+Nothing to stop is listening.
+.TP
+.B 4
+Permission denied or owner unresolved.
+.TP
+.B 5
+Refused.
+.TP
+.B 6
+Confirmation required or cancelled.
+.TP
+.B 7
+A stop was delivered, but the port was not confirmed free.
+.TP
+.B 8
+Several ports with different outcomes.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+Disables colour.
+.TP
+.BR DOCKER_HOST ", " DOCKER_CONTEXT
+Used to find a local container engine. Remote engines are ignored.
+.SH EXAMPLES
+.nf
+portly
+portly 8000
+portly stop 3000 8000
+portly stop 8000 \-\-json
+.fi
