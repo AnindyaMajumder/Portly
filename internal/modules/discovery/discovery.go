@@ -48,38 +48,31 @@ func observe(ctx context.Context, scan scanFunc, endpoints []domain.Endpoint) (d
 		if err != nil {
 			return domain.Snapshot{}, err
 		}
-		stable := sameOwners(previous, current, endpoints)
-		markStable(&current, endpoints, stable)
+		isStable := markStable(previous, &current, endpoints)
 		previous = current
-		if stable {
+		if isStable {
 			break
 		}
 	}
 	return previous, nil
 }
 
-// markStable records stability without touching other endpoints.
-func markStable(snapshot *domain.Snapshot, endpoints []domain.Endpoint, stable bool) {
+// markStable compares each endpoint on its own, so one can't block another.
+func markStable(previous domain.Snapshot, snapshot *domain.Snapshot, endpoints []domain.Endpoint) bool {
+	isEveryStable := true
 	ports := maps.Clone(snapshot.Ports)
 	if ports == nil {
 		ports = map[domain.Endpoint]domain.PortState{}
 	}
 	for _, endpoint := range endpoints {
+		isStable := maps.EqualFunc(holdersByID(previous, endpoint), holdersByID(*snapshot, endpoint), slices.Equal)
+		isEveryStable = isEveryStable && isStable
 		state := snapshot.PortState(endpoint)
-		state.Stable = domain.TriOf(stable)
+		state.Stable = domain.TriOf(isStable)
 		ports[endpoint] = state
 	}
 	snapshot.Ports = ports
-}
-
-// sameOwners compares sockets and their holders on the named endpoints.
-func sameOwners(a, b domain.Snapshot, endpoints []domain.Endpoint) bool {
-	for _, endpoint := range endpoints {
-		if !maps.EqualFunc(holdersByID(a, endpoint), holdersByID(b, endpoint), slices.Equal) {
-			return false
-		}
-	}
-	return true
+	return isEveryStable
 }
 
 // holdersByID maps each socket on an endpoint to its holders' identities.

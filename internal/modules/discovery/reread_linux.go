@@ -11,8 +11,9 @@ import (
 
 var errGone = errors.New("process is gone")
 
-// reread reads identity and descriptor again, with nothing slow in between.
+// reread finds the socket first and reads identity last, right before the signal.
 func (s source) reread(holder domain.Holder, id domain.SocketID) (domain.Process, bool, error) {
+	holds := s.stillHolds(holder, id)
 	stat, err := parseStat(s.read(holder.PID, "stat"))
 	if err != nil {
 		return domain.Process{}, false, fmt.Errorf("read process %d: %w", holder.PID, errGone)
@@ -22,7 +23,7 @@ func (s source) reread(holder domain.Holder, id domain.SocketID) (domain.Process
 	process.UserID, process.RealUID = status.userID, status.realUID
 	process.Tracer, process.Caught, process.Ignored, process.Blocked = status.tracer, status.caught, status.ignored, status.blocked
 	process.Exe = s.link(holder.PID, "exe")
-	return process, s.stillHolds(holder, id), nil
+	return process, holds, nil
 }
 
 // stillHolds checks the recorded descriptor first, then the others.

@@ -56,6 +56,24 @@ func TestObserveStability(t *testing.T) {
 	}
 }
 
+// TestStabilityIsPerEndpoint proves a churning port blocks only itself.
+func TestStabilityIsPerEndpoint(t *testing.T) {
+	other := domain.Endpoint{Port: 9000, Protocol: domain.TCP}
+	withOther := func(inode string) domain.Snapshot {
+		snapshot := view("1", 10, "5")
+		churn := view(inode, 11, inode)
+		churn.Sockets[0].ID.Endpoint = other
+		snapshot.Sockets = append(snapshot.Sockets, churn.Sockets[0])
+		snapshot.Processes[11] = churn.Processes[11]
+		return snapshot
+	}
+	scan, _ := script(withOther("7"), withOther("8"), withOther("9"))
+	got, _ := observe(t.Context(), scan, []domain.Endpoint{named, other})
+	if got.Ports[named].Stable != domain.Yes || got.Ports[other].Stable != domain.No {
+		t.Errorf("got %+v", got.Ports)
+	}
+}
+
 // TestObserveKeepsLatestView proves the decision uses the newest scan.
 func TestObserveKeepsLatestView(t *testing.T) {
 	scan, _ := script(view("1", 10, "5"), view("2", 11, "6"), view("2", 11, "6"))
