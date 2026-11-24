@@ -13,6 +13,20 @@ type Binding struct {
 // Endpoint is the host port and protocol of a binding.
 func (b Binding) Endpoint() Endpoint { return Endpoint{Port: b.HostPort, Protocol: b.Protocol} }
 
+// Address is the host address, where unset means every IPv4 address.
+func (b Binding) Address() netip.Addr {
+	if !b.HostAddr.IsValid() {
+		return netip.IPv4Unspecified()
+	}
+	return b.HostAddr
+}
+
+// Matches compares a socket on the same endpoint by exact address.
+func (b Binding) Matches(id SocketID) bool {
+	address := id.Addr.WithZone("")
+	return b.HostAddr == address || !b.HostAddr.IsValid() && address.IsUnspecified()
+}
+
 // Container is a running container and its published ports.
 type Container struct {
 	ID         string

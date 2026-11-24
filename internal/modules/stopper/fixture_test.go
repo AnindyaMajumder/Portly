@@ -13,6 +13,7 @@ var (
 	web       = domain.Endpoint{Port: 8000, Protocol: domain.TCP}
 	api       = domain.Endpoint{Port: 9000, Protocol: domain.TCP}
 	dbID      = strings.Repeat("d", 64)
+	dbPath    = "/system.slice/docker-" + dbID + ".scope"
 )
 
 const (
@@ -91,7 +92,7 @@ func change(snapshot *domain.Snapshot, pid int, edit func(*domain.Process)) {
 // published adds a proven local Docker container publishing port 8000.
 func published(snapshot *domain.Snapshot) {
 	init := developer(initPID, 1)
-	init.UserID, init.ContainerIDs = "0", []string{dbID}
+	init.UserID, init.ContainerIDs, init.ContainerPath = "0", []string{dbID}, dbPath
 	add(snapshot, init)
 	container := domain.Container{
 		ID: dbID, Engine: "engine-1", StartedAt: "t1", Name: "db", StopSignal: "SIGTERM", InitPID: initPID,

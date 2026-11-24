@@ -78,9 +78,11 @@ type Evidence struct {
 type Socket struct {
 	ID         SocketID
 	CreatorUID string
-	Connected  bool
-	Holders    []Holder
-	Evidence   []Evidence
+	// Creator's name, for display
+	CreatorUser string
+	Connected   bool
+	Holders     []Holder
+	Evidence    []Evidence
 }
 
 // Completeness is the weakest evidence, unavailable when there is none.

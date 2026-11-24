@@ -50,6 +50,9 @@ func New(world World, containers ContainerStopper) *Stopper {
 	return &Stopper{world: world, containers: containers, pin: pinProcess, gates: withEvidence(platformGates())}
 }
 
+// Enabled reports whether this platform's gate is open.
+func (s *Stopper) Enabled() bool { return s.gates.native }
+
 // Decide plans one stop command. It reads nothing but the snapshot.
 func (s *Stopper) Decide(snapshot domain.Snapshot, request domain.StopRequest) domain.StopPlan {
 	return decide(snapshot, request, s.gates)
@@ -103,10 +106,24 @@ func (s *Stopper) attemptProcess(ctx context.Context, request domain.StopRequest
 	if !delivery.Accepted {
 		return refused(domain.Refusal{Code: delivery.Code})
 	}
-	verified := s.verifyProcess(ctx, planned, program, pins[planned.Root].Alive)
+	// A worker that appeared since the prompt must be gone too
+	watched := planned
+	watched.Members = union(planned.Members, current.Members)
+	verified := s.verifyProcess(ctx, watched, program, pins[planned.Root].Alive)
 	verified.Method, verified.Delivered = method, true
 	verified.Resumed, verified.Killed = delivery.Resumed, delivery.Killed
 	return verified
+}
+
+// union joins two member lists without repeats.
+func union(planned, current []domain.ProcessID) []domain.ProcessID {
+	joined := slices.Clone(planned)
+	for _, member := range current {
+		if !slices.Contains(joined, member) {
+			joined = append(joined, member)
+		}
+	}
+	return joined
 }
 
 // pinTargets pins the root, and every member before a force kill.

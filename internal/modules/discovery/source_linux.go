@@ -62,6 +62,9 @@ func (s source) scan(ctx context.Context) (domain.Snapshot, error) {
 	snapshot := domain.Snapshot{Host: s.host(), Sockets: sockets, Processes: map[int]domain.Process{}}
 	holders := s.readProcesses(ctx, pids, &snapshot)
 	attachHolders(&snapshot, holders, completeness)
+	for i := range snapshot.Sockets {
+		snapshot.Sockets[i].CreatorUser = s.users.lookup(snapshot.Sockets[i].CreatorUID).name
+	}
 	s.addDetails(ctx, &snapshot)
 	snapshot.Ports = portStates(snapshot.Sockets, completeness)
 	if ctx.Err() != nil {
@@ -136,7 +139,7 @@ func (s source) readProcesses(ctx context.Context, pids []int, snapshot *domain.
 		process := processFrom(pid, stat)
 		process.Sockets = completeness
 		// Needed for every process, to prove an engine is local
-		process.ContainerIDs = outsideSelf(parseCgroup(s.read(pid, "cgroup")).containerIDs, snapshot.Host.SelfContainer)
+		process.ContainerIDs, process.ContainerPath = parseCgroup(s.read(pid, "cgroup")).outside(snapshot.Host.SelfContainer)
 		mu.Lock()
 		defer mu.Unlock()
 		snapshot.Processes[pid] = process
@@ -299,20 +302,10 @@ func (s source) detail(known domain.Process, selfContainer string) (domain.Proce
 	process.Sockets, process.UserID, process.RealUID = known.Sockets, status.userID, status.realUID
 	process.User, process.Home, process.Exe, process.Dir, process.Args = owner.name, owner.home, exe, directory, arguments
 	process.Tracer, process.Caught, process.Ignored, process.Blocked = status.tracer, status.caught, status.ignored, status.blocked
-	process.ContainerIDs, process.Unit = outsideSelf(group.containerIDs, selfContainer), group.unit
+	process.ContainerIDs, process.ContainerPath = group.outside(selfContainer)
+	process.Unit = group.unit
 	process.UserManager = group.manager
 	return process, true
-}
-
-// outsideSelf drops Portly's own container and anything around it.
-func outsideSelf(ids []string, self string) []string {
-	if self == "" {
-		return ids
-	}
-	if i := slices.Index(ids, self); i >= 0 {
-		return ids[i+1:]
-	}
-	return ids
 }
 
 // path names a process file.

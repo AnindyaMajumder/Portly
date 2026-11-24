@@ -191,7 +191,7 @@ func TestHostNetworkReach(t *testing.T) {
 	snapshot := world()
 	published(&snapshot)
 	editContainer(&snapshot, func(c *domain.Container) { c.Ports, c.HostNet = nil, true })
-	change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs = []string{dbID} })
+	change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs, p.ContainerPath = []string{dbID}, dbPath })
 	snapshot.Sockets = []domain.Socket{listener(web, "77", appPID)}
 	before := ask(snapshot, web)
 	snapshot.Sockets = append(snapshot.Sockets, listener(api, "78", appPID))
@@ -210,7 +210,7 @@ func TestHostNetworkContainer(t *testing.T) {
 		snapshot := world()
 		published(&snapshot)
 		editContainer(&snapshot, func(c *domain.Container) { c.Ports, c.HostNet = nil, true })
-		change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs = []string{dbID} })
+		change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs, p.ContainerPath = []string{dbID}, dbPath })
 		snapshot.Sockets = []domain.Socket{listener(web, "77", appPID)}
 		return snapshot
 	}
@@ -253,7 +253,7 @@ func TestRefusedContainerIsNotStoppedThroughAnotherPort(t *testing.T) {
 	}
 	// A host-network holder of the same container on a refused port
 	editContainer(&snapshot, func(c *domain.Container) { c.Ports, c.HostNet = c.Ports[:1], true })
-	change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs = []string{dbID} })
+	change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs, p.ContainerPath = []string{dbID}, dbPath })
 	add(&snapshot, developer(700, shellPID))
 	snapshot.Sockets[1] = listener(api, "91", appPID, 700)
 	plan = ask(snapshot, web, api)

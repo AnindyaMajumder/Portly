@@ -65,6 +65,47 @@ func (s Snapshot) HeldBy(pid int) []Socket {
 	return found
 }
 
+// Publisher is a container and the engine that reported it.
+type Publisher struct {
+	Engine    Engine
+	Container Container
+}
+
+// Publishers lists running containers publishing an endpoint, each once.
+func (s Snapshot) Publishers(endpoint Endpoint) []Publisher {
+	var found []Publisher
+	for _, engine := range s.Engines {
+		for _, container := range engine.Containers {
+			isKnown := slices.ContainsFunc(found, func(p Publisher) bool { return p.Container.ID == container.ID })
+			if container.Running && len(container.Publishes(endpoint)) > 0 && !isKnown {
+				container.Engine = engine.ID
+				found = append(found, Publisher{engine, container})
+			}
+		}
+	}
+	return found
+}
+
+// IsInside requires a process in the same cgroup subtree as the container's init process.
+func (s Snapshot) IsInside(pid int, container Container) bool {
+	path := s.containerPath(container)
+	return path != "" && s.Processes[pid].ContainerPath == path
+}
+
+// ProvenLocal requires the init process here, inside that container's cgroup.
+func (s Snapshot) ProvenLocal(container Container) bool {
+	return s.containerPath(container) != ""
+}
+
+// containerPath is the cgroup path of a container's init process, empty when unproven.
+func (s Snapshot) containerPath(container Container) string {
+	init, known := s.Processes[container.InitPID]
+	if !known || container.InitPID <= 1 || container.ID == "" || !slices.Contains(init.ContainerIDs, container.ID) {
+		return ""
+	}
+	return init.ContainerPath
+}
+
 // Ancestors walks parents, nearest first. False when the chain is broken.
 func (s Snapshot) Ancestors(pid int) ([]Process, bool) {
 	var chain []Process

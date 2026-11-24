@@ -13,6 +13,8 @@ const (
 	scanDeadline       = 3 * time.Second
 	listEngineDeadline = 400 * time.Millisecond
 	stopEngineDeadline = 3 * time.Second
+	// Extra time for answers that were cut off by their own deadline
+	engineGrace = 100 * time.Millisecond
 )
 
 // Confirm asks the user again before a force kill.
@@ -38,6 +40,7 @@ type Projects interface {
 // Stopper decides and acts.
 type Stopper interface {
 	Decide(snapshot domain.Snapshot, request domain.StopRequest) domain.StopPlan
+	Enabled() bool
 	Run(ctx context.Context, request domain.StopRequest, target domain.StopTarget, confirm stopper.Confirm) domain.Outcome
 }
 
@@ -66,9 +69,14 @@ func NewWorld(scanner Scanner, engines Engines) *World {
 
 // Observe scans for a stop and asks every engine, in parallel.
 func (w *World) Observe(ctx context.Context, endpoints []domain.Endpoint) (domain.Snapshot, error) {
-	scan := func(ctx context.Context) (domain.Snapshot, error) { return w.scanner.Observe(ctx, endpoints) }
-	snapshot, _, err := w.join(ctx, scan, stopEngineDeadline)
+	snapshot, _, err := w.observe(ctx, endpoints)
 	return snapshot, err
+}
+
+// observe also returns notes for --verbose.
+func (w *World) observe(ctx context.Context, endpoints []domain.Endpoint) (domain.Snapshot, []string, error) {
+	scan := func(ctx context.Context) (domain.Snapshot, error) { return w.scanner.Observe(ctx, endpoints) }
+	return w.join(ctx, scan, stopEngineDeadline)
 }
 
 // Look scans without engines.
@@ -104,10 +112,17 @@ func (w *World) join(ctx context.Context, scan func(context.Context) (domain.Sna
 	scanCtx, cancelScan := context.WithTimeout(ctx, scanDeadline)
 	defer cancelScan()
 	snapshot, err := scan(scanCtx)
-	found := <-answers
 	if err != nil {
-		return domain.Snapshot{}, found.notes, err
+		return domain.Snapshot{}, nil, err
 	}
-	snapshot.Engines, snapshot.EnginesSeen = found.engines, domain.Complete
-	return snapshot, found.notes, nil
+	// Looking for engines may hang on a dead network path
+	stuck := time.NewTimer(patience + engineGrace)
+	defer stuck.Stop()
+	select {
+	case found := <-answers:
+		snapshot.Engines, snapshot.EnginesSeen = found.engines, domain.Complete
+		return snapshot, found.notes, nil
+	case <-stuck.C:
+		return snapshot, []string{"Looking for container engines took too long"}, nil
+	}
 }

@@ -491,6 +491,43 @@ func TestFamilyWithLivingWorkersIsDraining(t *testing.T) {
 	}
 }
 
+// TestNewWorkerMustBeGoneToo covers a worker replaced while the prompt was open.
+func TestNewWorkerMustBeGoneToo(t *testing.T) {
+	l := newLab(family())
+	replaceWorker := func(w *fakeWorld) {
+		w.exit(602)
+		w.snapshot.Processes[603] = developer(603, appPID)
+		w.snapshot.Sockets = []domain.Socket{listener(web, "77", appPID, 601, 603)}
+	}
+	l.onTerminate = func(w *fakeWorld) {
+		w.exit(appPID)
+		w.exit(601)
+		w.release(603)
+	}
+	if outcome := l.stop(t, false, replaceWorker, web); outcome.Code != domain.CodeDraining || outcome.ProcessExited != domain.No {
+		t.Errorf("got %+v", outcome)
+	}
+}
+
+// TestPartialVerificationIsUnknown never reads a missing process as exited.
+func TestPartialVerificationIsUnknown(t *testing.T) {
+	l := newLab(world())
+	l.onTerminate = func(w *fakeWorld) {
+		w.exit(appPID)
+		w.snapshot.Host.ProcessTable = domain.Partial
+	}
+	if outcome := l.stop(t, false, nil, web); outcome.Code != domain.CodeUnknownOutcome {
+		t.Errorf("got %+v", outcome)
+	}
+}
+
+// TestEnabled follows the platform gate.
+func TestEnabled(t *testing.T) {
+	if !(&Stopper{gates: openGates}).Enabled() || (&Stopper{}).Enabled() {
+		t.Error("enabled must follow the gate")
+	}
+}
+
 // TestDescriptorIsPassedToReread keeps the last read short.
 func TestDescriptorIsPassedToReread(t *testing.T) {
 	snapshot := world()

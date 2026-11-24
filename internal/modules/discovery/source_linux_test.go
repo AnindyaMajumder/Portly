@@ -1,10 +1,13 @@
 package discovery
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -95,11 +98,17 @@ func TestHostInsideContainer(t *testing.T) {
 
 // TestOwnContainerIsNative drops our container and anything around it.
 func TestOwnContainerIsNative(t *testing.T) {
-	if got := outsideSelf([]string{"outer", "self", "inner"}, "self"); !slices.Equal(got, []string{"inner"}) {
-		t.Errorf("got %v", got)
+	nested := cgroupInfo{containerIDs: []string{"outer", "self", "inner"}, containerPaths: []string{"/o", "/o/s", "/o/s/i"}}
+	if ids, path := nested.outside("self"); !slices.Equal(ids, []string{"inner"}) || path != "/o/s/i" {
+		t.Errorf("got %v %q", ids, path)
 	}
-	if got := outsideSelf([]string{"other"}, "self"); !slices.Equal(got, []string{"other"}) {
-		t.Errorf("got %v", got)
+	if ids, path := nested.outside("inner"); len(ids) != 0 || path != "" {
+		t.Errorf("own container: %v %q", ids, path)
+	}
+	for _, self := range []string{"", "elsewhere"} {
+		if ids, path := nested.outside(self); len(ids) != 3 || path != "/o" {
+			t.Errorf("%q: %v %q", self, ids, path)
+		}
 	}
 }
 
@@ -107,8 +116,9 @@ func TestOwnContainerIsNative(t *testing.T) {
 func TestEveryProcessHasContainers(t *testing.T) {
 	fake, id := newFakeProc(t), strings.Repeat("e", 64)
 	fake.process(fakeProcess{pid: 800, ppid: 1, uid: "0", start: 80, cgroup: "/system.slice/docker-" + id + ".scope"})
-	if got := scanFake(t, fake).Processes[800].ContainerIDs; !slices.Equal(got, []string{id}) {
-		t.Errorf("got %v", got)
+	found := scanFake(t, fake).Processes[800]
+	if !slices.Equal(found.ContainerIDs, []string{id}) || found.ContainerPath != "/system.slice/docker-"+id+".scope" {
+		t.Errorf("got %v %q", found.ContainerIDs, found.ContainerPath)
 	}
 }
 
@@ -235,27 +245,61 @@ func TestReread(t *testing.T) {
 	}
 }
 
-// TestRealListener finds a listener of this test process.
-func TestRealListener(t *testing.T) {
+// childVariable turns the test binary into a listener that ends by itself.
+const childVariable = "PORTLY_DISCOVERY_CHILD"
+
+// TestMain runs the tests, or listens until told to close.
+func TestMain(m *testing.M) {
+	if os.Getenv(childVariable) == "" {
+		os.Exit(m.Run())
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		os.Exit(1)
+	}
+	fmt.Println(listener.Addr().(*net.TCPAddr).Port)
+	time.AfterFunc(30*time.Second, func() { os.Exit(9) })
+	input := bufio.NewReader(os.Stdin)
+	_, _ = input.ReadString('\n')
+	_ = listener.Close()
+	fmt.Println("closed")
+	_, _ = input.ReadString('\n')
+}
+
+// TestRealListener finds another process, because emulators fake the own one.
+func TestRealListener(t *testing.T) {
+	command := exec.Command(os.Args[0])
+	command.Env = append(os.Environ(), childVariable+"=1")
+	input, errIn := command.StdinPipe()
+	output, errOut := command.StdoutPipe()
+	if err := errors.Join(errIn, errOut, command.Start()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = input.Close()
+		_ = command.Wait()
+	})
+	lines := bufio.NewReader(output)
+	line, _ := lines.ReadString('\n')
+	port, err := strconv.ParseUint(strings.TrimSpace(line), 10, 16)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
-	endpoint := domain.Endpoint{Port: uint16(listener.Addr().(*net.TCPAddr).Port), Protocol: domain.TCP}
+	endpoint := domain.Endpoint{Port: uint16(port), Protocol: domain.TCP}
 	snapshot, err := New().Observe(t.Context(), []domain.Endpoint{endpoint})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sockets := snapshot.On(endpoint)
-	if len(sockets) != 1 || !sockets[0].HeldBy(os.Getpid()) || snapshot.Ports[endpoint].Stable != domain.Yes {
+	pid, sockets := command.Process.Pid, snapshot.On(endpoint)
+	if len(sockets) != 1 || !sockets[0].HeldBy(pid) || snapshot.Ports[endpoint].Stable != domain.Yes {
 		t.Fatalf("got %+v, %+v", sockets, snapshot.Ports[endpoint])
 	}
 	process, holds, err := New().Reread(sockets[0].Holders[0], sockets[0].ID)
-	if err != nil || !holds || !process.Same(snapshot.Processes[os.Getpid()].ProcessID) {
-		t.Errorf("reread %+v %v %v", process, holds, err)
+	if err != nil || !holds || !process.Same(snapshot.Processes[pid].ProcessID) {
+		t.Errorf("reread %+v %v %v, want %+v", process.ProcessID, holds, err, snapshot.Processes[pid].ProcessID)
 	}
-	listener.Close()
+	_, _ = input.Write([]byte("close\n"))
+	_, _ = lines.ReadString('\n')
 	if _, holds, _ := New().Reread(sockets[0].Holders[0], sockets[0].ID); holds {
 		t.Error("a closed socket is not held")
 	}

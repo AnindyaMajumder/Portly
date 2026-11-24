@@ -1,6 +1,7 @@
 package stopper
 
 import (
+	"cmp"
 	"slices"
 	"strconv"
 	"strings"
@@ -42,7 +43,7 @@ func ownershipRefusal(snapshot domain.Snapshot, sockets []domain.Socket, code do
 	refusal.Advice.NeedsAdmin = true
 	for _, socket := range sockets {
 		if unresolvedCode(snapshot.Host, socket) == code {
-			refusal.Advice.Owner = socket.CreatorUID
+			refusal.Advice.Owner = cmp.Or(socket.CreatorUser, socket.CreatorUID)
 		}
 	}
 	return refusal

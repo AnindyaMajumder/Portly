@@ -1,6 +1,7 @@
 package stopper
 
 import (
+	"cmp"
 	"regexp"
 	"slices"
 	"strings"
@@ -130,7 +131,7 @@ func permissionRefusal(process domain.Process) domain.Refusal {
 	if process.UserID == "" {
 		return domain.Refusal{Code: domain.CodeUnresolved}
 	}
-	return domain.Refusal{Code: domain.CodePermissionDenied, Advice: domain.Advice{NeedsAdmin: true, Owner: process.UserID}}
+	return domain.Refusal{Code: domain.CodePermissionDenied, Advice: domain.Advice{NeedsAdmin: true, Owner: cmp.Or(process.User, process.UserID)}}
 }
 
 // isProtected is structural: PID 1, kernel, managers, Portly and its ancestors.

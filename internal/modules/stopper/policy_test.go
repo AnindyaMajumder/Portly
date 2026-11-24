@@ -490,6 +490,30 @@ func TestRefusedTargetIsNotStoppedThroughAnotherPort(t *testing.T) {
 	}
 }
 
+// TestRefusedChildTaintsItsParent covers a parent that would take it down.
+func TestRefusedChildTaintsItsParent(t *testing.T) {
+	snapshot := world()
+	child := developer(601, appPID)
+	child.Tracer = domain.Yes
+	add(&snapshot, child)
+	snapshot.Sockets = []domain.Socket{listener(web, "77", 601), listener(api, "78", appPID)}
+	plan := ask(snapshot, web, api)
+	if plan.Results[0].Refusal.Code != domain.CodeDebugged || plan.Results[1].Refusal.Code != domain.CodeRefusedElsewhere {
+		t.Errorf("got %+v", plan.Results)
+	}
+}
+
+// TestOwnerNamesAreShown prefers a name and falls back to the ID.
+func TestOwnerNamesAreShown(t *testing.T) {
+	for name, want := range map[string]string{"root": "root", "": "0"} {
+		snapshot := world()
+		snapshot.Sockets[0].Holders, snapshot.Sockets[0].CreatorUID, snapshot.Sockets[0].CreatorUser = nil, "0", name
+		if got := ask(snapshot, web).Results[0].Refusal.Advice.Owner; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	}
+}
+
 // TestUDPIsSeparate proves TCP and UDP never affect each other.
 func TestUDPIsSeparate(t *testing.T) {
 	snapshot := world()

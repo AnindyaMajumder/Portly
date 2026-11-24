@@ -242,7 +242,7 @@ func samplePlan() app.Plan {
 	return app.Plan{
 		Stop: domain.StopPlan{ID: strings.Repeat("a", 32), Targets: []domain.StopTarget{web, db}, Results: []domain.PortResult{
 			{Endpoint: endpoint(8000), Target: 0}, {Endpoint: endpoint(5432), Target: 1},
-			{Endpoint: endpoint(22), Target: -1, Refusal: domain.Refusal{Code: domain.CodePermissionDenied, Advice: domain.Advice{NeedsAdmin: true, Owner: "0"}}},
+			{Endpoint: endpoint(22), Target: -1, Refusal: domain.Refusal{Code: domain.CodePermissionDenied, Advice: domain.Advice{NeedsAdmin: true, Owner: "root"}}},
 		}},
 		Targets: []app.Target{
 			{Stop: web, Process: webProcess(), Project: shopProject(), Children: []domain.Process{*webProcess()}},
@@ -427,7 +427,7 @@ func TestEveryCodeIsExplained(t *testing.T) {
 // TestHints covers administrator commands, units, UDP and quoting.
 func TestHints(t *testing.T) {
 	tcp, udp := domain.Endpoint{Port: 22, Protocol: domain.TCP}, domain.Endpoint{Port: 53, Protocol: domain.UDP}
-	admin := domain.Refusal{Code: domain.CodePermissionDenied, Advice: domain.Advice{NeedsAdmin: true, Owner: "0"}}
+	admin := domain.Refusal{Code: domain.CodePermissionDenied, Advice: domain.Advice{NeedsAdmin: true, Owner: "root"}}
 	unit := func(advice domain.Advice) domain.Refusal {
 		return domain.Refusal{Code: domain.CodeSupervised, Advice: advice}
 	}

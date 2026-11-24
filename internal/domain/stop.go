@@ -58,7 +58,8 @@ type Advice struct {
 	CanStopUnit bool
 	NeedsAdmin  bool
 	UDPOnly     bool
-	Owner       string
+	// A user name, or an ID when the name is unknown
+	Owner string
 }
 
 // Refusal says why an endpoint is not stopped.

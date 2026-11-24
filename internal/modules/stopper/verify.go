@@ -29,7 +29,7 @@ func (s *Stopper) verifyProcess(ctx context.Context, planned domain.StopTarget, 
 		snapshot, err := s.world.Look(ctx)
 		sockets, isReadable := socketsOn(snapshot, endpointsOf(planned))
 		exited := domain.TriOf(!isAlive() && !hasLiveMember(snapshot, planned))
-		if err != nil || !isReadable {
+		if err != nil || !isReadable || snapshot.Host.ProcessTable != domain.Complete {
 			return domain.Outcome{Code: domain.CodeUnknownOutcome, ProcessExited: exited}, false
 		}
 		outcome := domain.Outcome{ProcessExited: exited, PortReleased: domain.TriOf(len(sockets) == 0)}

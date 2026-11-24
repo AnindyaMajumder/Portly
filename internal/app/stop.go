@@ -23,21 +23,23 @@ type Plan struct {
 	Stop     domain.StopPlan
 	Targets  []Target
 	Warnings []string
+	Notes    []string
 }
 
 // Plan decides what a stop would do. It changes nothing.
 func (a *App) Plan(ctx context.Context, request domain.StopRequest, expect string) (Plan, error) {
-	snapshot, err := a.world.Observe(ctx, request.Endpoints)
+	snapshot, notes, err := a.world.observe(ctx, request.Endpoints)
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{Request: request, Stop: a.stopper.Decide(snapshot, request), Warnings: snapshot.Warnings}
+	plan := Plan{Request: request, Stop: a.stopper.Decide(snapshot, request), Warnings: snapshot.Warnings, Notes: notes}
 	for _, target := range plan.Stop.Targets {
 		plan.Targets = append(plan.Targets, a.describeTarget(ctx, snapshot, target))
 	}
-	if expect != "" && expect != plan.Stop.ID {
+	// With nothing to stop, the refusals themselves say why
+	if expect != "" && expect != plan.Stop.ID && len(plan.Targets) > 0 {
 		return plan, domain.NewError(domain.CodeChanged, "The targets are not the ones you expected, nothing was stopped",
-			"Run the stop with --json again and use the new plan_id")
+			"Check the targets again before stopping them")
 	}
 	return plan, nil
 }
@@ -65,6 +67,9 @@ func (a *App) describeTarget(ctx context.Context, snapshot domain.Snapshot, targ
 	}
 	return described
 }
+
+// CanStop reports whether this build may stop anything on this platform.
+func (a *App) CanStop() bool { return a.stopper.Enabled() }
 
 // Execute stops every target in order. A cancelled run sends nothing more.
 func (a *App) Execute(ctx context.Context, plan Plan, confirm stopper.Confirm) []domain.Outcome {

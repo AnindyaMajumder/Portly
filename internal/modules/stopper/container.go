@@ -1,7 +1,6 @@
 package stopper
 
 import (
-	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -10,47 +9,26 @@ import (
 	"github.com/AnindyaMajumder/Portly/internal/domain"
 )
 
-// publisher is a container and the engine that reported it.
-type publisher struct {
-	engine    domain.Engine
-	container domain.Container
-}
-
-// publishersOf lists running containers publishing an endpoint, each once.
-func publishersOf(snapshot domain.Snapshot, endpoint domain.Endpoint) []publisher {
-	var found []publisher
-	for _, engine := range snapshot.Engines {
-		for _, container := range engine.Containers {
-			isKnown := slices.ContainsFunc(found, func(p publisher) bool { return p.container.ID == container.ID })
-			if container.Running && len(container.Publishes(endpoint)) > 0 && !isKnown {
-				container.Engine = engine.ID
-				found = append(found, publisher{engine, container})
-			}
-		}
-	}
-	return found
-}
-
 // resolvePublished allows one container that explains every socket.
-func resolvePublished(snapshot domain.Snapshot, result resolution, sockets []domain.Socket, publishers []publisher, isForced bool) resolution {
+func resolvePublished(snapshot domain.Snapshot, result resolution, sockets []domain.Socket, publishers []domain.Publisher, isForced bool) resolution {
 	if len(publishers) > 1 {
 		return result.refuse(domain.CodeAmbiguous)
 	}
 	owner := publishers[0]
-	if hasSilentEngine(snapshot, owner.engine.OwnerUID) {
+	if hasSilentEngine(snapshot, owner.Engine.OwnerUID) {
 		return result.refuse(domain.CodeEngineUnresponsive)
 	}
-	isLocal := isProvenLocal(snapshot, owner.container)
-	bindings := owner.container.Publishes(result.endpoint)
+	isLocal := snapshot.ProvenLocal(owner.Container)
+	bindings := owner.Container.Publishes(result.endpoint)
 	for _, socket := range sockets {
-		if !isExplained(snapshot, owner.engine, bindings, socket, isLocal) {
+		if !isExplained(snapshot, owner.Engine, bindings, socket, isLocal) {
 			return result.refuse(domain.CodeAmbiguous)
 		}
 	}
 	if !isLocal && len(sockets) == 0 {
 		return result.refuse(domain.CodeContainerUnproven)
 	}
-	target := containerTarget(owner.container)
+	target := containerTarget(owner.Container)
 	target.Bindings = bindings
 	return finishContainer(snapshot, result, owner, target, isForced)
 }
@@ -72,17 +50,22 @@ func resolveHostNetwork(snapshot domain.Snapshot, result resolution, sockets []d
 			}
 			container.Engine = engine.ID
 			result.containers = append(result.containers, container.Ref())
-			if !isProvenLocal(snapshot, container) {
+			if !everyInside(snapshot, result.owners, container) {
 				return result.refuse(domain.CodeContainerUnproven)
 			}
 			target := containerTarget(container)
 			for _, socket := range sockets {
 				target.Named = append(target.Named, socket.ID)
 			}
-			return finishContainer(snapshot, result, publisher{engine, container}, target, isForced)
+			return finishContainer(snapshot, result, domain.Publisher{Engine: engine, Container: container}, target, isForced)
 		}
 	}
 	return result.refuse(domain.CodeContainerUnproven)
+}
+
+// everyInside ties each holder to the container, because anyone may name a cgroup.
+func everyInside(snapshot domain.Snapshot, pids []int, container domain.Container) bool {
+	return !slices.ContainsFunc(pids, func(pid int) bool { return !snapshot.IsInside(pid, container) })
 }
 
 // holdsFromContainer reports whether any holder runs in a container.
@@ -91,14 +74,14 @@ func holdsFromContainer(snapshot domain.Snapshot, pids []int) bool {
 }
 
 // finishContainer applies the rules shared by every container target.
-func finishContainer(snapshot domain.Snapshot, result resolution, owner publisher, target domain.StopTarget, isForced bool) resolution {
-	container, host := owner.container, snapshot.Host
+func finishContainer(snapshot domain.Snapshot, result resolution, owner domain.Publisher, target domain.StopTarget, isForced bool) resolution {
+	container, host := owner.Container, snapshot.Host
 	isSelf := host.SelfContainer != "" && container.ID == host.SelfContainer
 	isSelfUnclear := host.SelfContainer == "" && host.InContainer != domain.No
 	switch {
 	case isSelf || isSelfUnclear:
 		return result.refuse(domain.CodeContainerSelf)
-	case snapshot.EnginesSeen != domain.Complete || owner.engine.Answer != domain.AnswerOK:
+	case snapshot.EnginesSeen != domain.Complete || owner.Engine.Answer != domain.AnswerOK:
 		return result.refuse(domain.CodeEngineUnresponsive)
 	case !container.Inspected || !container.Ref().Same(container.Ref()):
 		return result.refuse(domain.CodeEngineUnresponsive)
@@ -107,7 +90,7 @@ func finishContainer(snapshot domain.Snapshot, result resolution, owner publishe
 	case !target.GracefulAvailable && !isForced:
 		return result.refuse(domain.CodeNoGraceful)
 	}
-	result.candidate = &candidate{target: target, engine: owner.engine.Kind, container: container}
+	result.candidate = &candidate{target: target, engine: owner.Engine.Kind, container: container}
 	return result
 }
 
@@ -119,11 +102,7 @@ func containerTarget(container domain.Container) domain.StopTarget {
 		GracefulAvailable: hasGracefulSignal(container.StopSignal),
 	}
 	for _, binding := range container.Ports {
-		address := binding.HostAddr
-		if !address.IsValid() {
-			address = netip.IPv4Unspecified()
-		}
-		other := domain.AddressPort{Endpoint: binding.Endpoint(), Addr: address}
+		other := domain.AddressPort{Endpoint: binding.Endpoint(), Addr: binding.Address()}
 		if !slices.Contains(target.Other, other) {
 			target.Other = append(target.Other, other)
 		}
@@ -150,15 +129,9 @@ func hasGracefulSignal(signal string) bool {
 // systemd images use SIGRTMIN+3
 var realTimeSignal = regexp.MustCompile(`^RT(MIN(\+[0-9]{1,2})?|MAX(-[0-9]{1,2})?)$`)
 
-// isProvenLocal requires the init process here, inside that container's cgroup.
-func isProvenLocal(snapshot domain.Snapshot, container domain.Container) bool {
-	init, known := snapshot.Processes[container.InitPID]
-	return known && container.InitPID > 1 && container.ID != "" && slices.Contains(init.ContainerIDs, container.ID)
-}
-
 // isExplained requires the engine's user, its program and an exact binding.
 func isExplained(snapshot domain.Snapshot, engine domain.Engine, bindings []domain.Binding, socket domain.Socket, isLocal bool) bool {
-	if engine.OwnerUID == "" || socket.CreatorUID != engine.OwnerUID || !matchesBinding(bindings, socket) {
+	if engine.OwnerUID == "" || socket.CreatorUID != engine.OwnerUID || !slices.ContainsFunc(bindings, func(b domain.Binding) bool { return b.Matches(socket.ID) }) {
 		return false
 	}
 	if len(socket.Holders) == 0 {
@@ -171,16 +144,4 @@ func isExplained(snapshot domain.Snapshot, engine domain.Engine, bindings []doma
 		}
 	}
 	return true
-}
-
-// matchesBinding compares addresses exactly. Bindings already match the port.
-func matchesBinding(bindings []domain.Binding, socket domain.Socket) bool {
-	address := socket.ID.Addr.WithZone("")
-	for _, binding := range bindings {
-		isAnyAddress := !binding.HostAddr.IsValid() && address.IsUnspecified()
-		if isAnyAddress || binding.HostAddr == address {
-			return true
-		}
-	}
-	return false
 }

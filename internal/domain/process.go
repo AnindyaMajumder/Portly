@@ -56,8 +56,10 @@ type Process struct {
 
 	// Outermost container first
 	ContainerIDs []string
-	Unit         Unit
-	Job          Job
+	// Cgroup path up to the outermost container, which a name can't forge
+	ContainerPath string
+	Unit          Unit
+	Job           Job
 	// Windows service or session 0
 	Service Tri
 }

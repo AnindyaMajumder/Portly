@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/AnindyaMajumder/Portly/internal/app"
 	"github.com/AnindyaMajumder/Portly/internal/domain"
 )
 
@@ -62,8 +61,8 @@ func (s *session) explain(endpoint domain.Endpoint, refusal domain.Refusal) *dom
 // permission names the owner and prints the command, never runs it.
 func (s *session) permission(advice domain.Advice, port string) (string, string) {
 	message := "it belongs to another user"
-	if owner := app.UserName(advice.Owner); owner != "" {
-		message += " (" + owner + ")"
+	if advice.Owner != "" {
+		message += " (" + clean(advice.Owner) + ")"
 	}
 	if s.console.Windows {
 		return message, "Run 'portly stop " + port + "' in an administrator terminal"

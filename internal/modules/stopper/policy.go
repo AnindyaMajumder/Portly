@@ -73,10 +73,10 @@ func distinct(endpoints []domain.Endpoint) []domain.Endpoint {
 
 // resolve finds the one owner of an endpoint, or the reason to refuse.
 func resolve(snapshot domain.Snapshot, endpoint domain.Endpoint, isForced bool, gates gates) resolution {
-	sockets, publishers := snapshot.On(endpoint), publishersOf(snapshot, endpoint)
+	sockets, publishers := snapshot.On(endpoint), snapshot.Publishers(endpoint)
 	result := resolution{endpoint: endpoint, owners: domain.HolderPIDs(sockets)}
 	for _, publisher := range publishers {
-		result.containers = append(result.containers, publisher.container.Ref())
+		result.containers = append(result.containers, publisher.Container.Ref())
 	}
 	state := snapshot.PortState(endpoint)
 	if state.Table != domain.Complete {
@@ -152,7 +152,11 @@ func isTainted(snapshot domain.Snapshot, target domain.StopTarget, owners map[in
 		}
 		return containers[target.Container]
 	}
-	return slices.ContainsFunc(target.Members, func(member domain.ProcessID) bool { return owners[member.PID] })
+	if slices.ContainsFunc(target.Members, func(member domain.ProcessID) bool { return owners[member.PID] }) {
+		return true
+	}
+	// Stopping a parent may take its refused child down
+	return slices.ContainsFunc(snapshot.Descendants(target.Root.PID), func(pid int) bool { return owners[pid] })
 }
 
 // isGateOpen comes last, so specific refusals stay visible.

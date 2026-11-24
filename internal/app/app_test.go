@@ -73,6 +73,9 @@ type fakeStopper struct {
 // Decide returns the plan.
 func (f *fakeStopper) Decide(domain.Snapshot, domain.StopRequest) domain.StopPlan { return f.plan }
 
+// Enabled is always true here.
+func (f *fakeStopper) Enabled() bool { return true }
+
 // Run records the target.
 func (f *fakeStopper) Run(_ context.Context, _ domain.StopRequest, target domain.StopTarget, _ stopper.Confirm) domain.Outcome {
 	f.ran = append(f.ran, target.Root.PID)
@@ -202,7 +205,7 @@ func TestContainersInReports(t *testing.T) {
 	}
 	table := processes(map[int]int{10: 0, 30: 0})
 	init := table[30]
-	init.ContainerIDs = []string{"db"}
+	init.ContainerIDs, init.ContainerPath = []string{"db"}, "/db"
 	table[30] = init
 	snapshot := domain.Snapshot{Host: host, Processes: table, Sockets: []domain.Socket{
 		socketOn("127.0.0.1", 5432, domain.TCP, "0"), socketOn("0.0.0.0", 7000, domain.TCP, "0", 30), socketOn("192.168.0.5", 5432, domain.TCP, "1000", 10),
@@ -253,6 +256,47 @@ func TestSlowEnginesDoNotBlock(t *testing.T) {
 	})
 }
 
+// stuckEngines never answers, not even at its deadline.
+type stuckEngines struct{ release chan struct{} }
+
+// Engines blocks like a dead network path.
+func (s stuckEngines) Engines(context.Context) ([]domain.Engine, []string) {
+	<-s.release
+	return nil, nil
+}
+
+// TestStuckEnginesAreNotSeen keeps stops refused instead of hanging.
+func TestStuckEnginesAreNotSeen(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		world := NewWorld(&fakeScanner{}, stuckEngines{release})
+		snapshot, notes, err := world.list(t.Context())
+		if err != nil || snapshot.EnginesSeen != domain.Unavailable || len(notes) != 1 {
+			t.Errorf("%v %v %v", snapshot.EnginesSeen, notes, err)
+		}
+		close(release)
+	})
+}
+
+// TestSameContainerIsOneOwner covers one engine reached through two sockets.
+func TestSameContainerIsOneOwner(t *testing.T) {
+	container := domain.Container{ID: "db", Running: true, Ports: []domain.Binding{{HostPort: 80, Protocol: domain.TCP}}}
+	engines := []domain.Engine{{ID: "a", Containers: []domain.Container{container}}, {ID: "b", Containers: []domain.Container{container}}}
+	report := describe(domain.Snapshot{Engines: engines}, domain.Endpoint{Port: 80, Protocol: domain.TCP})
+	if len(report.Owners) != 1 || report.Ambiguous {
+		t.Errorf("got %+v", report)
+	}
+}
+
+// TestInspectDropsRepeats covers 53 together with 53/tcp.
+func TestInspectDropsRepeats(t *testing.T) {
+	app := build(domain.Snapshot{Host: host, Processes: processes(map[int]int{10: 0}), Sockets: []domain.Socket{socketOn("127.0.0.1", 53, domain.TCP, "1000", 10)}})
+	report, _ := app.Inspect(t.Context(), []domain.PortRef{{Port: 53}, {Port: 53, Protocol: domain.TCP}})
+	if len(report.Ports) != 1 {
+		t.Errorf("got %+v", report.Ports)
+	}
+}
+
 // TestWorldPassesThrough covers errors, looks and rereads.
 func TestWorldPassesThrough(t *testing.T) {
 	scanner := &fakeScanner{err: errors.New("broken")}
@@ -300,6 +344,10 @@ func TestPlanAndExpect(t *testing.T) {
 	if _, err := app.Plan(t.Context(), domain.StopRequest{}, "other"); err == nil || domain.AsError(err).Code != domain.CodeChanged {
 		t.Errorf("expect: %v", err)
 	}
+	fake.plan = domain.StopPlan{Results: []domain.PortResult{{Target: -1}}}
+	if _, err := app.Plan(t.Context(), domain.StopRequest{}, "other"); err != nil || !app.CanStop() {
+		t.Errorf("refusals must explain themselves: %v", err)
+	}
 	if len(fake.ran) != 0 {
 		t.Error("planning must not act")
 	}
@@ -330,8 +378,5 @@ func TestKinds(t *testing.T) {
 		if got := kindOf(process); got != want {
 			t.Errorf("%s: %s", exe, got)
 		}
-	}
-	if UserName("0") != "root" && UserName("0") != "0" || UserName("987654") != "987654" || UserName("") != "" {
-		t.Error("user names")
 	}
 }

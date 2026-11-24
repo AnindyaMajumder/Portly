@@ -1,8 +1,8 @@
 package app
 
 import (
+	"cmp"
 	"context"
-	"os/user"
 	"slices"
 	"strings"
 	"sync"
@@ -51,7 +51,12 @@ func (a *App) Inspect(ctx context.Context, refs []domain.PortRef) (Report, error
 	}
 	report := Report{Warnings: snapshot.Warnings, Notes: notes}
 	for _, ref := range distinctRefs(refs) {
-		report.Ports = append(report.Ports, inspectRef(snapshot, ref)...)
+		for _, port := range inspectRef(snapshot, ref) {
+			isRepeat := slices.ContainsFunc(report.Ports, func(known domain.PortReport) bool { return known.Ref == port.Ref })
+			if !isRepeat {
+				report.Ports = append(report.Ports, port)
+			}
+		}
 	}
 	a.addProjects(ctx, snapshot, report.Ports)
 	return report, nil
@@ -125,12 +130,17 @@ func describe(snapshot domain.Snapshot, endpoint domain.Endpoint) domain.PortRep
 func containerOwners(snapshot domain.Snapshot, endpoint domain.Endpoint, sockets []domain.Socket) ([]domain.Owner, []domain.Socket) {
 	var owners []domain.Owner
 	rest := slices.Clone(sockets)
+	seen := map[string]bool{}
 	for _, engine := range snapshot.Engines {
 		for _, container := range engine.Containers {
+			if seen[container.ID] {
+				continue
+			}
+			seen[container.ID] = true
 			bindings := container.Publishes(endpoint)
 			var mine []domain.Socket
 			rest = slices.DeleteFunc(rest, func(socket domain.Socket) bool {
-				isMine := publishes(bindings, socket) || holdsFrom(snapshot, socket, container.ID)
+				isMine := publishes(bindings, socket) || holdsFrom(snapshot, socket, container)
 				if isMine {
 					mine = append(mine, socket)
 				}
@@ -150,8 +160,7 @@ func containerOwner(snapshot domain.Snapshot, engine domain.Engine, container do
 	if engine.Kind == "podman" {
 		owner.Type = "Podman"
 	}
-	init, known := snapshot.Processes[container.InitPID]
-	owner.Proven = known && container.ID != "" && slices.Contains(init.ContainerIDs, container.ID)
+	owner.Proven = snapshot.ProvenLocal(container)
 	if container.ComposeProject != "" {
 		owner.Project = &domain.Project{
 			Name: container.ComposeProject, Root: container.Directory, Confidence: domain.High, Evidence: "compose label",
@@ -162,16 +171,12 @@ func containerOwner(snapshot domain.Snapshot, engine domain.Engine, container do
 
 // publishes matches a socket with a container's bindings.
 func publishes(bindings []domain.Binding, socket domain.Socket) bool {
-	return slices.ContainsFunc(bindings, func(binding domain.Binding) bool {
-		return binding.HostAddr == socket.ID.Addr || !binding.HostAddr.IsValid() && socket.ID.Addr.IsUnspecified()
-	})
+	return slices.ContainsFunc(bindings, func(binding domain.Binding) bool { return binding.Matches(socket.ID) })
 }
 
 // holdsFrom reports whether a holder runs inside a container.
-func holdsFrom(snapshot domain.Snapshot, socket domain.Socket, id string) bool {
-	return slices.ContainsFunc(socket.Holders, func(holder domain.Holder) bool {
-		return id != "" && slices.Contains(snapshot.Processes[holder.PID].ContainerIDs, id)
-	})
+func holdsFrom(snapshot domain.Snapshot, socket domain.Socket, container domain.Container) bool {
+	return slices.ContainsFunc(socket.Holders, func(holder domain.Holder) bool { return snapshot.IsInside(holder.PID, container) })
 }
 
 // nativeOwners groups the remaining sockets by process family.
@@ -189,7 +194,7 @@ func nativeOwners(snapshot domain.Snapshot, sockets []domain.Socket) []domain.Ow
 		if !seen {
 			index = len(owners)
 			hidden[socket.CreatorUID] = index
-			owners = append(owners, hiddenOwner(snapshot.Host, socket.CreatorUID))
+			owners = append(owners, hiddenOwner(snapshot.Host, socket))
 		}
 		owners[index].Listeners = append(owners[index].Listeners, socket)
 	}
@@ -233,20 +238,12 @@ func processOwner(snapshot domain.Snapshot, pid int, sockets []domain.Socket) do
 }
 
 // hiddenOwner describes sockets whose process is not visible.
-func hiddenOwner(host domain.Host, userID string) domain.Owner {
-	owner := domain.Owner{Type: "Native", Access: domain.AccessUnknown, User: UserName(userID)}
-	if userID != "" && userID != host.CallerUID && !host.Privileged {
+func hiddenOwner(host domain.Host, socket domain.Socket) domain.Owner {
+	owner := domain.Owner{Type: "Native", Access: domain.AccessUnknown, User: cmp.Or(socket.CreatorUser, socket.CreatorUID)}
+	if socket.CreatorUID != "" && socket.CreatorUID != host.CallerUID && !host.Privileged {
 		owner.Access = domain.AccessDenied
 	}
 	return owner
-}
-
-// UserName resolves a user ID, or returns it unchanged.
-func UserName(id string) string {
-	if entry, err := user.LookupId(id); err == nil && id != "" {
-		return entry.Username
-	}
-	return id
 }
 
 // runtimes maps program name prefixes to display kinds.

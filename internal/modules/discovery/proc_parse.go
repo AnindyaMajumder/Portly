@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/netip"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -190,48 +191,60 @@ var containerSegment = regexp.MustCompile(`^(?:docker-|libpod-|cri-containerd-|c
 // cgroupInfo says which containers and unit a process belongs to.
 type cgroupInfo struct {
 	containerIDs []string
-	unit         domain.Unit
-	manager      bool
+	// Path up to each container, in the same order
+	containerPaths []string
+	unit           domain.Unit
+	manager        bool
 }
 
 // parseCgroup reads containers and the service unit, for cgroup v1 and v2.
 func parseCgroup(data []byte) cgroupInfo {
-	var info cgroupInfo
-	var other []string
+	var info, other cgroupInfo
 	for line := range strings.Lines(string(data)) {
 		parts := strings.SplitN(strings.TrimSpace(line), ":", 3)
 		if len(parts) != 3 || !strings.HasPrefix(parts[2], "/") {
 			continue
 		}
-		ids := containerIDsIn(parts[2])
+		ids, paths := containersIn(parts[2])
 		if parts[0] != "0" && parts[1] != "name=systemd" {
-			if len(ids) > len(other) {
-				other = ids
+			if len(ids) > len(other.containerIDs) {
+				other.containerIDs, other.containerPaths = ids, paths
 			}
 			continue
 		}
 		if len(ids) > len(info.containerIDs) {
-			info.containerIDs = ids
+			info.containerIDs, info.containerPaths = ids, paths
 		}
 		if info.unit.Kind < domain.UnitService {
 			info.unit, info.manager = innermostUnit(parts[2])
 		}
 	}
 	if len(info.containerIDs) == 0 {
-		info.containerIDs = other
+		info.containerIDs, info.containerPaths = other.containerIDs, other.containerPaths
 	}
 	return info
 }
 
-// containerIDsIn lists container IDs in a cgroup path, outermost first.
-func containerIDsIn(path string) []string {
-	var ids []string
+// containersIn lists container IDs in a cgroup path and the path up to each, outermost first.
+func containersIn(path string) ([]string, []string) {
+	var ids, paths, walked []string
 	for part := range strings.SplitSeq(path, "/") {
+		walked = append(walked, part)
 		if match := containerSegment.FindStringSubmatch(part); match != nil {
-			ids = append(ids, match[1])
+			ids, paths = append(ids, match[1]), append(paths, strings.Join(walked, "/"))
 		}
 	}
-	return ids
+	return ids, paths
+}
+
+// outside drops Portly's own container and anything around it.
+func (c cgroupInfo) outside(self string) ([]string, string) {
+	// Not found gives -1, so everything stays
+	first := slices.Index(c.containerIDs, self) + 1
+	if first == len(c.containerIDs) {
+		return nil, ""
+	}
+	return c.containerIDs[first:], c.containerPaths[first]
 }
 
 // innermostUnit finds the last service or scope in a cgroup path.
