@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// TestParsePortRef covers accepted and rejected port arguments.
 func TestParsePortRef(t *testing.T) {
 	valid := map[string]PortRef{
 		"8000": {8000, ""}, ":8000": {8000, ""}, "53/udp": {53, UDP}, "80/TCP": {80, TCP}, "65535": {65535, ""}, "1": {1, ""},
@@ -25,6 +26,7 @@ func TestParsePortRef(t *testing.T) {
 	}
 }
 
+// FuzzParsePortRef checks that accepted text round-trips.
 func FuzzParsePortRef(f *testing.F) {
 	f.Add("8000")
 	f.Add(":53/udp")
@@ -39,6 +41,7 @@ func FuzzParsePortRef(f *testing.F) {
 	})
 }
 
+// TestBarePortMeansTCP proves UDP is only stopped when named.
 func TestBarePortMeansTCP(t *testing.T) {
 	for ref, want := range map[PortRef]Protocol{{80, ""}: TCP, {80, TCP}: TCP, {80, UDP}: UDP} {
 		if got := ref.StopEndpoint().Protocol; got != want {
@@ -47,6 +50,7 @@ func TestBarePortMeansTCP(t *testing.T) {
 	}
 }
 
+// TestProcessIdentity proves any change or unknown field breaks a match.
 func TestProcessIdentity(t *testing.T) {
 	base := ProcessID{PID: 10, Start: "5", UserID: "1000", Exe: "/bin/a"}
 	if !base.Same(base) {
@@ -82,6 +86,7 @@ func TestProcessIdentity(t *testing.T) {
 	}
 }
 
+// testSocket builds a fully known socket identity.
 func testSocket(inode string) SocketID {
 	endpoint := Endpoint{Port: 8000, Protocol: TCP}
 	return SocketID{
@@ -90,6 +95,7 @@ func testSocket(inode string) SocketID {
 	}
 }
 
+// TestSocketIdentity proves unknown sockets never match.
 func TestSocketIdentity(t *testing.T) {
 	base := testSocket("77")
 	if !base.Same(base) {
@@ -110,6 +116,7 @@ func TestSocketIdentity(t *testing.T) {
 	}
 }
 
+// TestSocketCompleteness proves the weakest evidence decides.
 func TestSocketCompleteness(t *testing.T) {
 	cases := []struct {
 		evidence []Evidence
@@ -127,6 +134,7 @@ func TestSocketCompleteness(t *testing.T) {
 	}
 }
 
+// TestAncestorsAndDescendants covers chains, cycles and missing parents.
 func TestAncestorsAndDescendants(t *testing.T) {
 	snapshot := Snapshot{Processes: map[int]Process{}}
 	for pid, parent := range map[int]int{1: 0, 10: 1, 11: 10, 12: 11, 20: 99, 30: 31, 31: 30} {
@@ -145,6 +153,7 @@ func TestAncestorsAndDescendants(t *testing.T) {
 	}
 }
 
+// testTarget builds an allowed single-process target.
 func testTarget() StopTarget {
 	return StopTarget{
 		Kind: KindProcess, Root: ProcessID{PID: 10, Start: "5", UserID: "1000", Exe: "/bin/a"},
@@ -152,6 +161,7 @@ func testTarget() StopTarget {
 	}
 }
 
+// TestApproveAllowsTheSameTarget proves an approval works once, for one method.
 func TestApproveAllowsTheSameTarget(t *testing.T) {
 	approval, err := Approve(testTarget(), testTarget(), Graceful)
 	if err != nil {
@@ -168,6 +178,7 @@ func TestApproveAllowsTheSameTarget(t *testing.T) {
 	}
 }
 
+// TestZeroApprovalRefuses proves nothing acts without an approval.
 func TestZeroApprovalRefuses(t *testing.T) {
 	for _, approval := range []*Approval{nil, {}} {
 		for _, method := range []Method{"", Graceful, Forced} {
@@ -184,6 +195,7 @@ func TestZeroApprovalRefuses(t *testing.T) {
 	}
 }
 
+// TestApproveRefusesChanges covers every change between prompt and signal.
 func TestApproveRefusesChanges(t *testing.T) {
 	extra := AddressPort{Endpoint: Endpoint{9000, TCP}, Addr: netip.MustParseAddr("127.0.0.1")}
 	changes := map[string]func(*StopTarget){
@@ -204,6 +216,7 @@ func TestApproveRefusesChanges(t *testing.T) {
 	}
 }
 
+// TestForceApprovalComparesIdentityOnly allows closed sockets but not all of them.
 func TestForceApprovalComparesIdentityOnly(t *testing.T) {
 	planned := testTarget()
 	planned.Named = append(planned.Named, testSocket("78"))
@@ -217,6 +230,7 @@ func TestForceApprovalComparesIdentityOnly(t *testing.T) {
 	}
 }
 
+// TestContainerApproval proves a restarted container is another target.
 func TestContainerApproval(t *testing.T) {
 	planned := StopTarget{Kind: KindContainer, Container: ContainerRef{"e", "id", "t1"}}
 	if _, err := Approve(planned, planned, Graceful); err != nil {
@@ -233,6 +247,7 @@ func TestContainerApproval(t *testing.T) {
 	}
 }
 
+// TestCodesMatchSchema keeps reason codes and the JSON schema equal.
 func TestCodesMatchSchema(t *testing.T) {
 	data, err := os.ReadFile("../../schema/portly.v1.schema.json")
 	if err != nil {
@@ -254,6 +269,7 @@ func TestCodesMatchSchema(t *testing.T) {
 	}
 }
 
+// TestExitCodes pins the documented exit statuses.
 func TestExitCodes(t *testing.T) {
 	for code, want := range map[Code]int{
 		CodeUsage: 2, CodeNotListening: 3, CodePermissionDenied: 4, CodeProtected: 5,

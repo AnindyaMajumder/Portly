@@ -87,8 +87,10 @@ type Error struct {
 	Hint    string
 }
 
+// Error is the message shown to the user.
 func (e *Error) Error() string { return e.Message }
 
+// NewError builds a user-facing error with a next step.
 func NewError(code Code, message, hint string) *Error {
 	return &Error{Code: code, Message: message, Hint: hint}
 }

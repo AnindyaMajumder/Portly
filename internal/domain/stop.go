@@ -144,6 +144,7 @@ func sameTarget(planned, current StopTarget) bool {
 	return planned.Root.Same(current.Root) && sharesSocket(planned.Named, current.Named)
 }
 
+// sharesSocket reports whether any planned socket is still there.
 func sharesSocket(planned, current []SocketID) bool {
 	return slices.ContainsFunc(planned, func(id SocketID) bool { return containsSocket(current, id) })
 }
@@ -172,6 +173,7 @@ func sameReach(planned, current StopTarget) bool {
 	return current.GracefulAvailable == planned.GracefulAvailable
 }
 
+// containsSocket finds a socket by full identity.
 func containsSocket(sockets []SocketID, wanted SocketID) bool {
 	return slices.ContainsFunc(sockets, wanted.Same)
 }

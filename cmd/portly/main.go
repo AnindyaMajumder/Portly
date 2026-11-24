@@ -5,6 +5,7 @@ import "fmt"
 
 var version = "dev"
 
+// main prints the version until the command line exists.
 func main() {
 	fmt.Println("portly", version)
 }

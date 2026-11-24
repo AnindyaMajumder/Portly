@@ -7,6 +7,7 @@ import (
 	"unicode"
 )
 
+// TestClean covers escapes, bidi, invisible and invalid characters.
 func TestClean(t *testing.T) {
 	cases := map[string]string{
 		"plain":              "plain",
@@ -26,6 +27,7 @@ func TestClean(t *testing.T) {
 	}
 }
 
+// TestMaskArgs covers secret formats and look-alikes that must stay.
 func TestMaskArgs(t *testing.T) {
 	cases := []struct{ name, in, want string }{
 		{"flag equals", "app --password=hunter2", "app --password=***"},
@@ -57,6 +59,7 @@ func TestMaskArgs(t *testing.T) {
 	}
 }
 
+// TestMaskInsideShellSnippet covers sh -c style arguments.
 func TestMaskInsideShellSnippet(t *testing.T) {
 	cases := map[string]string{
 		"app --token abc --port 80":            "app --token *** --port 80",
@@ -71,6 +74,7 @@ func TestMaskInsideShellSnippet(t *testing.T) {
 	}
 }
 
+// TestSafeNamesStay proves harmless flags stay readable.
 func TestSafeNamesStay(t *testing.T) {
 	for _, arg := range []string{"--max-tokens=5", "--tokenizer=fast", "--author=bob"} {
 		if got := MaskArgs([]string{"app", arg})[1]; got != arg {
@@ -79,6 +83,7 @@ func TestSafeNamesStay(t *testing.T) {
 	}
 }
 
+// TestMaskAuthorizationHeader covers bearer tokens with spaces.
 func TestMaskAuthorizationHeader(t *testing.T) {
 	got := MaskArgs([]string{"curl", "-H", "Authorization: Bearer abc.def.ghi"})
 	if strings.Contains(got[2], "abc") {
@@ -86,6 +91,7 @@ func TestMaskAuthorizationHeader(t *testing.T) {
 	}
 }
 
+// TestCommandLineQuotes proves printed commands are quoted.
 func TestCommandLineQuotes(t *testing.T) {
 	got := CommandLine([]string{"sh", "-c", "echo 'hi' && ls"})
 	if want := `sh -c 'echo '\''hi'\'' && ls'`; got != want {
@@ -93,6 +99,7 @@ func TestCommandLineQuotes(t *testing.T) {
 	}
 }
 
+// FuzzTextSafe proves control characters and secrets never survive.
 func FuzzTextSafe(f *testing.F) {
 	f.Add("--password=x", "\x1b]0;t\a")
 	f.Add("postgres://a:b@c", "--token")

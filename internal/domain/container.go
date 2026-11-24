@@ -10,6 +10,7 @@ type Binding struct {
 	Protocol      Protocol
 }
 
+// Endpoint is the host port and protocol of a binding.
 func (b Binding) Endpoint() Endpoint { return Endpoint{Port: b.HostPort, Protocol: b.Protocol} }
 
 // Container is a running container and its published ports.
@@ -54,6 +55,7 @@ func (c ContainerRef) Same(other ContainerRef) bool {
 	return c.Engine != "" && c.ID != "" && c.StartedAt != "" && c == other
 }
 
+// Ref is the identity a stop of this container is bound to.
 func (c Container) Ref() ContainerRef {
 	return ContainerRef{Engine: c.Engine, ID: c.ID, StartedAt: c.StartedAt}
 }

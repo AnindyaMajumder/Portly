@@ -9,6 +9,7 @@ const (
 	Complete
 )
 
+// String is the name used in JSON.
 func (c Completeness) String() string {
 	switch c {
 	case Complete:

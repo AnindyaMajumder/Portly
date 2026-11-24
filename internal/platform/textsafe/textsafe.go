@@ -53,18 +53,22 @@ func MaskArgs(args []string) []string {
 	return masked
 }
 
+// looksLikeFlag tells a following flag from a secret value.
 func looksLikeFlag(arg string) bool {
 	return len(arg) > 2 && strings.HasPrefix(arg, "--")
 }
 
+// isSecretFlag matches flags whose next argument is a secret.
 func isSecretFlag(arg string) bool {
 	return strings.HasPrefix(arg, "-") && !strings.ContainsAny(arg, "=: ") && isSecretName(strings.TrimLeft(arg, "-"))
 }
 
+// isSecretName matches names of secrets, minus known harmless ones.
 func isSecretName(name string) bool {
 	return secretName.MatchString(name) && !safeName.MatchString(name)
 }
 
+// maskInline masks a flag value inside one longer argument.
 func maskInline(match string) string {
 	parts := inlineFlag.FindStringSubmatch(match)
 	if isSecretFlag(parts[2]) {
@@ -73,6 +77,7 @@ func maskInline(match string) string {
 	return match
 }
 
+// maskOne applies every pattern to a single argument.
 func maskOne(arg string) string {
 	// Shell snippets such as sh -c "app --token x"
 	arg = inlineFlag.ReplaceAllStringFunc(arg, maskInline)
@@ -93,6 +98,7 @@ func maskOne(arg string) string {
 	return arg
 }
 
+// maskParam masks one query or key=value pair.
 func maskParam(match string) string {
 	parts := queryParam.FindStringSubmatch(match)
 	if isSecretName(parts[2]) {
@@ -101,6 +107,7 @@ func maskParam(match string) string {
 	return match
 }
 
+// maskURLUser masks passwords and tokens in a URL.
 func maskURLUser(match string) string {
 	scheme, userinfo, _ := strings.Cut(match, "://")
 	user, _, hasPassword := strings.Cut(strings.TrimSuffix(userinfo, "@"), ":")

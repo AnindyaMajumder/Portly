@@ -22,6 +22,7 @@ type PortRef struct {
 	Protocol Protocol
 }
 
+// String renders 8000 or 8000/udp, which parses back.
 func (r PortRef) String() string {
 	if r.Protocol == "" {
 		return strconv.Itoa(int(r.Port))
@@ -48,6 +49,7 @@ type Endpoint struct {
 	Protocol Protocol
 }
 
+// String renders 8000/tcp.
 func (e Endpoint) String() string { return fmt.Sprintf("%d/%s", e.Port, e.Protocol) }
 
 // Compare orders by port, then protocol.
@@ -62,6 +64,7 @@ type AddressPort struct {
 	Scope string
 }
 
+// String renders 127.0.0.1:8000 or [::1%lo]:8000.
 func (a AddressPort) String() string {
 	return netip.AddrPortFrom(a.Addr.WithZone(a.Scope), a.Port).String()
 }
@@ -69,6 +72,7 @@ func (a AddressPort) String() string {
 // Range is an inclusive port range. Zero contains nothing.
 type Range struct{ First, Last uint16 }
 
+// Contains reports whether a port is inside the range.
 func (r Range) Contains(port uint16) bool {
 	return r.First != 0 && port >= r.First && port <= r.Last
 }
