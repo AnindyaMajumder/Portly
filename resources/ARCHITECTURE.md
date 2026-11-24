@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| Status | Design for 1.0, revised after an engineering review. Nothing is implemented yet. |
+| Status | Implemented. Every evidence gate is still closed, so stopping is refused on every platform. |
 | Language | Go 1.27.4, no cgo |
 | Style | Modular monolith, one static binary |
 
-Statements marked **[to verify]** come from documentation or source reading and have not been run on that platform yet. Section 16 lists the tests each platform must pass before stopping is enabled there.
+Statements marked **[to verify]** come from documentation or source reading and have not been run on that platform yet. That covers all macOS and Windows behaviour. Section 16 lists the tests each platform must pass before stopping is enabled there.
 
 ## 1. Purpose
 
@@ -278,7 +278,7 @@ A failing or slow source never fails the scan. Its fields become unknown and a w
 |---|---|---|---|
 | Sockets | `/proc/net/{tcp,udp}{,6}` | `/usr/sbin/lsof` | `GetExtendedTcpTable`, `GetExtendedUdpTable` |
 | Owner | socket inode found in `/proc/*/fd` | reported by lsof | owner PID, checked against bind time (`TCP_TABLE_OWNER_MODULE_LISTENER`, `UDP_TABLE_OWNER_MODULE`) |
-| Process details | `/proc/PID/*` | sysctl, gopsutil | process handle, gopsutil |
+| Process details | `/proc/PID/*` | sysctl, gopsutil, `/bin/ps` for arguments | process handle, gopsutil |
 | Start identity | kernel start ticks | start time in microseconds | creation time in 100 ns |
 | Service manager | cgroup (systemd) | launchd system domain and the owner's domains | service manager, session 0 |
 | Ephemeral range | `ip_local_port_range` | `net.inet.ip.portrange` | 49152-65535 |
@@ -292,7 +292,7 @@ Platform facts that shape the design:
 - **macOS:** lsof hides other users' sockets, so results are cross-checked with `netstat`. Sockets only `netstat` sees are shown as permission denied. The cross-check supports discovery and is not proof that every holder was found. If it fails, stop is refused. macOS has full discovery and limited stopping. **[to verify]**
 - **Windows:** the table keeps the PID that bound the socket even after it exits. Only the `OWNER_MODULE` tables carry the bind time. An owner younger than its socket means the PID was reused, so the owner is unresolved. A missing or zero bind time also means unresolved. Parent PIDs get the same age check. **[to verify]**
 
-External programs run by absolute path, with separate arguments, a minimal environment and a deadline.
+External programs run by absolute path, with separate arguments, a minimal environment and a deadline: `lsof`, `netstat`, `ps` and `launchctl` on macOS, `systemctl show` on Linux. `ps` is used for arguments because the kernel call behind gopsutil also returns the environment. Spaces inside arguments are lost there, so masking is weaker.
 
 ### UDP
 
@@ -325,7 +325,7 @@ UDP has no listening state, so a browser looks like a server. Portly says **boun
 - Endpoint order: `DOCKER_HOST`, `DOCKER_CONTEXT`, the active context, then known paths (default, rootless, Docker Desktop, Colima, OrbStack, Podman).
 - Remote engines are ignored, because their ports are not local.
 - Sockets must be owned by root or the caller. Responses are size-limited.
-- **A local socket does not prove a local engine:** it can be forwarded from another machine or mounted into a container. An engine is proven local on Linux when the container's init PID exists here and its cgroup carries that container's ID. An engine that can't be proven local this way (a VM on macOS, Windows or Linux) counts only for a port whose host socket is held by that engine's known forwarder. Otherwise its containers are listed as unproven and can't be stopped.
+- **A local socket does not prove a local engine:** it can be forwarded from another machine or mounted into a container. An engine is proven local on Linux when the container's init PID exists here and its cgroup carries that container's ID. An engine that can't be proven local this way (a VM on macOS, Windows or Linux) counts only for a port whose host socket is held by that engine's own forwarder, recognized by the engine's socket path and the program's name. Otherwise its containers are listed as unproven and can't be stopped.
 - Limits: 400 ms for listing, 3 s to connect and inspect before a stop, 10 s to wait for the container to exit.
 - Only host-published ports are listed. Exposed-only ports are not.
 - Compose labels give the project, service and directory. Host-network containers are matched through the process's cgroup.
@@ -371,7 +371,7 @@ If an engine publishes a port, Portly never falls back to signalling a native pr
 | docker-proxy, rootlessport, rootlesskit, pasta, passt, slirp4netns, vpnkit, conmon, Docker Desktop (`com.docker.backend`), Lima, Colima, gvproxy, OrbStack, wslrelay, sshd, and ssh started by a VM manager | Refused: forwarder |
 | nodemon, pm2, supervisord, runit, s6, air, watchexec, `node --watch`, systemd, launchd, Windows services | Refused: supervised, with the right command where it is safe to print one |
 | Swarm, Kubernetes or systemd-managed container | Refused |
-| Container whose stop signal is a force kill | Refused without `--force` |
+| Container whose stop signal is not known to be graceful | Refused without `--force` |
 | Being debugged, or suspended while SIGTERM is ignored or blocked | Refused: unsupported |
 | Native Windows process | Refused without `--force`: no graceful method |
 | A platform whose evidence gate has not passed (section 16) | Refused: unsupported |
@@ -382,7 +382,7 @@ The policy is a pure function: snapshot in, stop plan out. It reads no clock and
 - **Verified family (Linux):** every holder of the socket has the same user and executable, all descend from one root through other holders, and the root catches SIGTERM. Being an ancestor is not enough: a package runner that does not hold the socket is never signalled. Catching SIGTERM does not prove a clean exit, so verification decides. Families are refused on macOS and Windows.
 - **Plain reloader:** the parent normally exits with its child. If the listener comes back within the verification window, the outcome is `restarted`, never success.
 - **System process:** without a service manager Portly can query, a process with no controlling terminal whose user is a system account is protected. Absence of evidence is not permission.
-- **Named supervisors** are matched on the ancestors up to the session leader or the first shell with a controlling terminal, so wrappers don't hide them. PID 1 and per-user managers are judged only by the two rules below.
+- **Named supervisors** are matched on the ancestors up to a session leader that has a controlling terminal, otherwise up to PID 1, so wrappers and `setsid` don't hide them. PID 1 and per-user managers are judged only by the two rules below.
 - **systemd:** an innermost cgroup unit of type `.service` means supervised. A `.scope`, such as a terminal or login session, does not. Exception: a process with a controlling terminal that is neither the unit's main process nor its direct child is not supervised by it, because shells started inside an application share its unit.
 - **launchd:** query the system domain and the owner's user and GUI domains. An unreadable domain blocks. Supervised means the listener or an ancestor is the main process of a job. An application job (`application.*`) counts only if the listener is that main process. Being reparented to launchd is not supervision. **[to verify]**
 - **Printed commands:** a stop command is printed only if the listener is the unit's main process or its direct child, and the unit is not ssh, cron, a user manager or the desktop session. Otherwise a status command is printed. Names in printed commands are quoted, or left out if they contain anything but letters, digits and `@._:-`, or start with `-`.
@@ -411,7 +411,7 @@ One command makes one plan. All named ports are resolved, grouped by target and 
 
 `portly stop <ports> --json` without `--yes` stops nothing and returns a `plan_id`. Passing it back with `--expect` makes the stop fail with `target_changed` if the plan differs.
 
-- The id is a truncated SHA-256 (128 bits) over the allowed targets: their identity, their named endpoints, and their other listening TCP and non-ephemeral UDP endpoints. Ephemeral UDP is left out because it changes constantly.
+- The id is a truncated SHA-256 (128 bits) over the allowed targets: their identity, family members, named endpoints, other listening TCP and non-ephemeral UDP endpoints, and whether they are suspended or paused. Ephemeral UDP is left out because it changes constantly.
 - A mismatch refuses the whole command. Every normal check still runs.
 - Before a force kill only target identity is compared, because the graceful stop may already have closed some sockets. The target must still hold at least one named socket, or be a running container.
 - It is not a secret and authorizes nothing.
@@ -477,7 +477,7 @@ A last resort for a process that ignores a graceful stop. It can lose unsaved da
 - `--force` alone asks twice, or once when there is no graceful method. `--force --yes` asks nothing. `--yes` alone never kills. Scripts should add `--expect`.
 - Every refusal in the policy table still applies, apart from the two rows that name `--force`. Ambiguous, protected, supervised, forwarder and unresolved targets can't be forced.
 - If there is no graceful method (a native Windows process, a container whose stop signal is a force kill), `--force` goes straight to its confirmation. Nothing graceful was possible, and Portly says so.
-- **Families:** killing only the root would leave workers holding the port. Portly shows and pins every member that holds the socket, kills the root first, then the members still holding it. Processes that don't hold the socket are never killed.
+- **Families:** killing only the root would leave workers holding the port. Portly shows and pins every member that holds the socket, kills the root first, then the members still holding it. Processes that don't hold the socket are never killed. If the root already exited, its workers are not killed, because the confirmed root can no longer be verified.
 - JSON reports `"method": "graceful"` or `"method": "forced"`, plus the PIDs that were killed.
 - Without a terminal, `--force` needs `--yes`. Otherwise the result is `confirmation_required`.
 
