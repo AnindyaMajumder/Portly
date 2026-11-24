@@ -104,6 +104,19 @@ func TestDockerGracefulStop(t *testing.T) {
 	}
 }
 
+// TestDockerNextToAClosedEngine covers a machine that also has root's Podman.
+func TestDockerNextToAClosedEngine(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("nothing is closed to root")
+	}
+	closedEngine[t.Name()] = true
+	defer delete(closedEngine, t.Name())
+	c := runContainer(t, "portly-test", obedient)
+	stop(t, c.port).expect(t, 0, "stopped")
+	s := start(t, "tcp")
+	stop(t, s.ports[0]).expect(t, 0, "stopped")
+}
+
 // TestDockerIgnoredStopIsPending proves t=-1 never ends in a kill.
 func TestDockerIgnoredStopIsPending(t *testing.T) {
 	c := runContainer(t, "portly-test", stubborn)

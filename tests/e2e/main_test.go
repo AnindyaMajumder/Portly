@@ -193,6 +193,7 @@ func portly(t *testing.T, binary string, args ...string) result {
 	t.Helper()
 	var stdout, stderr strings.Builder
 	command := exec.Command(binary, args...)
+	command.Env = append(os.Environ(), environment(t)...)
 	command.Stdout, command.Stderr = &stdout, &stderr
 	err := command.Run()
 	var exited *exec.ExitError
@@ -206,6 +207,17 @@ func portly(t *testing.T, binary string, args ...string) result {
 		}
 	}
 	return found
+}
+
+// closedEngine adds an engine the caller may not reach, for one test.
+var closedEngine = map[string]bool{}
+
+// environment points a chosen test's Portly at a closed directory.
+func environment(t *testing.T) []string {
+	if closedEngine[t.Name()] {
+		return []string{"DOCKER_HOST=unix:///root/portly-test/engine.sock"}
+	}
+	return nil
 }
 
 // stop runs a confirmed stop with the evidence build.
