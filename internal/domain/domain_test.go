@@ -283,3 +283,19 @@ func TestExitCodes(t *testing.T) {
 		t.Error("unknown errors are internal")
 	}
 }
+
+// TestPortStateFallsBackToTheTable covers ports without sockets.
+func TestPortStateFallsBackToTheTable(t *testing.T) {
+	endpoint := Endpoint{8000, TCP}
+	snapshot := Snapshot{Ports: map[Endpoint]PortState{{0, TCP}: {Table: Complete}}}
+	if got := snapshot.PortState(endpoint).Table; got != Complete {
+		t.Errorf("got %v", got)
+	}
+	snapshot.Ports[endpoint] = PortState{Table: Partial}
+	if got := snapshot.PortState(endpoint).Table; got != Partial {
+		t.Errorf("got %v", got)
+	}
+	if got := snapshot.PortState(Endpoint{53, UDP}).Table; got != Unavailable {
+		t.Errorf("an unread table must be unavailable, got %v", got)
+	}
+}

@@ -103,6 +103,15 @@ func TestOwnContainerIsNative(t *testing.T) {
 	}
 }
 
+// TestEveryProcessHasContainers covers processes that hold nothing here.
+func TestEveryProcessHasContainers(t *testing.T) {
+	fake, id := newFakeProc(t), strings.Repeat("e", 64)
+	fake.process(fakeProcess{pid: 800, ppid: 1, uid: "0", start: 80, cgroup: "/system.slice/docker-" + id + ".scope"})
+	if got := scanFake(t, fake).Processes[800].ContainerIDs; !slices.Equal(got, []string{id}) {
+		t.Errorf("got %v", got)
+	}
+}
+
 // TestUnreadableDescriptorsAreNotComplete covers hidden and denied descriptors.
 func TestUnreadableDescriptorsAreNotComplete(t *testing.T) {
 	fake := newFakeProc(t)

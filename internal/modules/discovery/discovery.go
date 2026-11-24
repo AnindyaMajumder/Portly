@@ -65,7 +65,7 @@ func markStable(snapshot *domain.Snapshot, endpoints []domain.Endpoint, stable b
 		ports = map[domain.Endpoint]domain.PortState{}
 	}
 	for _, endpoint := range endpoints {
-		state := ports[endpoint]
+		state := snapshot.PortState(endpoint)
 		state.Stable = domain.TriOf(stable)
 		ports[endpoint] = state
 	}

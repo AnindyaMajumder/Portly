@@ -46,6 +46,14 @@ func (s Snapshot) On(endpoint Endpoint) []Socket {
 	return found
 }
 
+// PortState falls back to the protocol's table when a port has no sockets.
+func (s Snapshot) PortState(endpoint Endpoint) PortState {
+	if state, known := s.Ports[endpoint]; known {
+		return state
+	}
+	return s.Ports[Endpoint{Protocol: endpoint.Protocol}]
+}
+
 // HeldBy returns every socket a process holds.
 func (s Snapshot) HeldBy(pid int) []Socket {
 	var found []Socket

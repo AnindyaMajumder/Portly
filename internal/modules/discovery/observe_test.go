@@ -81,3 +81,13 @@ func TestObserveFailsWithTheScan(t *testing.T) {
 		}
 	}
 }
+
+// TestStableKeepsTableQuality covers a port nobody uses.
+func TestStableKeepsTableQuality(t *testing.T) {
+	empty := domain.Snapshot{Ports: map[domain.Endpoint]domain.PortState{{Protocol: domain.TCP}: {Table: domain.Complete}}}
+	scan, _ := script(empty)
+	got, _ := observe(t.Context(), scan, []domain.Endpoint{named})
+	if state := got.Ports[named]; state.Table != domain.Complete || state.Stable != domain.Yes {
+		t.Errorf("got %+v", state)
+	}
+}

@@ -135,6 +135,8 @@ func (s source) readProcesses(ctx context.Context, pids []int, snapshot *domain.
 		held, completeness := s.heldSockets(pid, wanted)
 		process := processFrom(pid, stat)
 		process.Sockets = completeness
+		// Needed for every process, to prove an engine is local
+		process.ContainerIDs = outsideSelf(parseCgroup(s.read(pid, "cgroup")).containerIDs, snapshot.Host.SelfContainer)
 		mu.Lock()
 		defer mu.Unlock()
 		snapshot.Processes[pid] = process
@@ -291,6 +293,7 @@ func processFrom(pid int, stat procStat) domain.Process {
 		ProcessID: domain.ProcessID{PID: pid, Start: stat.start}, PPID: stat.ppid, SessionID: stat.session,
 		Name: stat.name, Kernel: stat.kernel, TTY: domain.TriOf(stat.tty != 0),
 		Zombie: stat.state == "Z" || stat.state == "X", Suspended: stat.state == "T",
+		Service: domain.No, Job: domain.Job{Known: true},
 	}
 }
 
