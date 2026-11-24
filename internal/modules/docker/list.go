@@ -16,6 +16,8 @@ const (
 	inspectWorkers = 8
 	kindDocker     = "docker"
 	kindPodman     = "podman"
+	// Every Podman answer carries it
+	podmanHeader = "Libpod-API-Version"
 )
 
 var containerID = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -54,13 +56,17 @@ type inspected struct {
 
 // list returns the engine kind and its running containers.
 func (a *api) list(ctx context.Context) (string, []domain.Container, domain.Answer) {
-	kind, err := a.kind(ctx)
+	var entries []listed
+	header, err := a.get(ctx, "/containers/json", &entries)
 	if err != nil {
 		return "", nil, answerFor(err)
 	}
-	var entries []listed
-	if err := a.get(ctx, "/containers/json", &entries); err != nil {
-		return kind, nil, answerFor(err)
+	kind := kindPodman
+	// Podman runs dpkg for /version, which takes longer than a listing may
+	if header.Get(podmanHeader) == "" {
+		if kind, err = a.kind(ctx); err != nil {
+			return "", nil, answerFor(err)
+		}
 	}
 	containers := make([]domain.Container, len(entries))
 	for i, entry := range entries {
@@ -80,7 +86,7 @@ func (a *api) kind(ctx context.Context) (string, error) {
 	var version struct {
 		Components []struct{ Name string }
 	}
-	if err := a.get(ctx, "/version", &version); err != nil {
+	if _, err := a.get(ctx, "/version", &version); err != nil {
 		return "", err
 	}
 	kind := ""
@@ -197,7 +203,7 @@ func (a *api) inspect(ctx context.Context, id string) (inspected, error) {
 	if !containerID.MatchString(id) {
 		return found, errMalformed
 	}
-	if err := a.get(ctx, "/containers/"+id+"/json", &found); err != nil {
+	if _, err := a.get(ctx, "/containers/"+id+"/json", &found); err != nil {
 		return found, err
 	}
 	if _, err := time.Parse(time.RFC3339Nano, found.State.StartedAt); err != nil || found.ID != id {

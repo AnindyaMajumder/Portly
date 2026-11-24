@@ -35,6 +35,7 @@ type fakeEngine struct {
 	list     string
 	inspect  string
 	status   int
+	podman   bool
 	requests []string
 	onPost   func(http.ResponseWriter, *http.Request)
 }
@@ -81,6 +82,9 @@ func (e *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	e.mu.Lock()
 	e.requests = append(e.requests, r.Method+" "+r.URL.RequestURI())
 	version, list, inspect, status, onPost := e.version, e.list, e.inspect, e.status, e.onPost
+	if e.podman {
+		w.Header().Set("Libpod-API-Version", "4.9.3")
+	}
 	e.mu.Unlock()
 	switch {
 	case r.Method == http.MethodPost && onPost != nil:
@@ -159,6 +163,19 @@ func TestPodmanIsRecognized(t *testing.T) {
 	engine.version = `{"Components":[{"Name":"Podman Engine"}]}`
 	if engines, _ := engine.client().Engines(t.Context()); engines[0].Kind != "podman" {
 		t.Errorf("got %+v", engines[0])
+	}
+}
+
+// TestPodmanIsListedWithoutVersion, because Podman answers that one too slowly.
+func TestPodmanIsListedWithoutVersion(t *testing.T) {
+	engine := newFakeEngine(t)
+	engine.podman = true
+	engines, _ := engine.client().Engines(t.Context())
+	if engines[0].Kind != "podman" || engines[0].Answer != domain.AnswerOK || !engines[0].Containers[0].Inspected {
+		t.Errorf("got %+v", engines[0])
+	}
+	if slices.Contains(engine.requests, "GET /version") {
+		t.Errorf("asked %v", engine.requests)
 	}
 }
 

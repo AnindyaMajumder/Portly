@@ -98,22 +98,22 @@ type statusError int
 // Error renders the status.
 func (s statusError) Error() string { return fmt.Sprintf("engine answered %d", int(s)) }
 
-// get decodes one bounded JSON response.
-func (a *api) get(ctx context.Context, path string, into any) error {
+// get decodes one bounded JSON response and returns its headers.
+func (a *api) get(ctx context.Context, path string, into any) (http.Header, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://engine"+path, nil)
 	if err != nil {
-		return fmt.Errorf("build engine request: %w", err)
+		return nil, fmt.Errorf("build engine request: %w", err)
 	}
 	response, err := a.http.Do(request)
 	if err != nil {
-		return fmt.Errorf("ask engine: %w", err)
+		return nil, fmt.Errorf("ask engine: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return statusError(response.StatusCode)
+		return nil, statusError(response.StatusCode)
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, maxResponse)).Decode(into); err != nil {
-		return fmt.Errorf("decode engine answer: %w", err)
+		return nil, fmt.Errorf("decode engine answer: %w", err)
 	}
-	return nil
+	return response.Header, nil
 }
