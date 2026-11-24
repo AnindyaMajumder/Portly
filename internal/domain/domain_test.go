@@ -157,7 +157,8 @@ func TestAncestorsAndDescendants(t *testing.T) {
 func testTarget() StopTarget {
 	return StopTarget{
 		Kind: KindProcess, Root: ProcessID{PID: 10, Start: "5", UserID: "1000", Exe: "/bin/a"},
-		Named: []SocketID{testSocket("77")}, GracefulAvailable: true,
+		Members: []ProcessID{{PID: 10, Start: "5", UserID: "1000", Exe: "/bin/a"}},
+		Named:   []SocketID{testSocket("77")}, GracefulAvailable: true,
 	}
 }
 
@@ -230,6 +231,20 @@ func TestForceApprovalComparesIdentityOnly(t *testing.T) {
 	}
 }
 
+// TestFirstForceApprovalChecksReach covers targets without a graceful method.
+func TestFirstForceApprovalChecksReach(t *testing.T) {
+	planned := testTarget()
+	planned.GracefulAvailable = false
+	current := planned
+	if _, err := Approve(planned, current, Forced); err != nil {
+		t.Fatal(err)
+	}
+	current.Suspended = true
+	if _, err := Approve(planned, current, Forced); err == nil {
+		t.Error("a change since the only prompt must refuse")
+	}
+}
+
 // TestContainerApproval proves a restarted container is another target.
 func TestContainerApproval(t *testing.T) {
 	planned := StopTarget{Kind: KindContainer, Container: ContainerRef{"e", "id", "t1"}}
@@ -297,5 +312,30 @@ func TestPortStateFallsBackToTheTable(t *testing.T) {
 	}
 	if got := snapshot.PortState(Endpoint{53, UDP}).Table; got != Unavailable {
 		t.Errorf("an unread table must be unavailable, got %v", got)
+	}
+}
+
+// TestForcedFamilyMayShrinkOnly covers workers that exit or appear.
+func TestForcedFamilyMayShrinkOnly(t *testing.T) {
+	worker := ProcessID{PID: 11, Start: "6", UserID: "1000", Exe: "/bin/a"}
+	planned := testTarget()
+	planned.Kind, planned.Members = KindFamily, append(planned.Members, worker)
+	if _, err := Approve(planned, testTarget(), Forced); err != nil {
+		t.Errorf("a smaller family is still the target: %v", err)
+	}
+	if _, err := Approve(planned, testTarget(), Graceful); err == nil {
+		t.Error("a graceful stop needs the same kind")
+	}
+	if _, err := Approve(testTarget(), planned, Forced); err == nil {
+		t.Error("a grown family must refuse")
+	}
+	empty := testTarget()
+	empty.Members = nil
+	if _, err := Approve(planned, empty, Forced); err == nil {
+		t.Error("no members must refuse")
+	}
+	container := StopTarget{Kind: KindContainer, Container: ContainerRef{"e", "id", "t1"}}
+	if _, err := Approve(container, planned, Forced); err == nil {
+		t.Error("a container is never a process")
 	}
 }

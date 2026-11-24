@@ -97,7 +97,7 @@ func checkSelector(s source, node *ast.SelectorExpr, report func(ast.Node, strin
 	switch {
 	case owner != nil && owner.Name == "domain" && name == "Approve" && s.layer() != "internal/modules/stopper":
 		report(node, "only stopper may approve a target")
-	case actingCalls[name] && !s.isExecutor() && !isContainerKill(s, name) && !isOwnSignalSetup(owner):
+	case actingCalls[name] && !s.isExecutor() && !isOwnSignalSetup(owner):
 		report(node, name+" is only allowed in stopper executors")
 	case owner != nil && owner.Name == "exec" && name == "Command":
 		report(node, "use exec.CommandContext with a deadline")
@@ -106,12 +106,6 @@ func checkSelector(s source, node *ast.SelectorExpr, report func(ast.Node, strin
 	case name == "Environ" && (owner == nil || owner.Name != "os"):
 		report(node, "other processes' environment is never read")
 	}
-}
-
-// isContainerKill allows the container executor and its interface.
-func isContainerKill(s source, name string) bool {
-	isStopLayer := s.path == "internal/modules/docker/stop.go" || s.path == "internal/modules/stopper/run.go"
-	return name == "Kill" && isStopLayer
 }
 
 // isOwnSignalSetup allows os/signal, which only concerns Portly itself.

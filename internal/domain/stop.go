@@ -92,6 +92,22 @@ type Delivery struct {
 	Killed []int
 }
 
+// Outcome is what one target's stop led to.
+type Outcome struct {
+	// A result code, empty when the target stopped
+	Code          Code
+	Method        Method
+	Advice        Advice
+	ProcessExited Tri
+	PortReleased  Tri
+	Resumed       bool
+	Killed        []int
+	// Delivered is false when nothing was sent
+	Delivered bool
+	// The target itself still holds the port
+	HeldByTarget bool
+}
+
 // ContainerState is a container's state during verification.
 type ContainerState struct {
 	Known     bool
@@ -116,10 +132,11 @@ func Approve(planned, current StopTarget, method Method) (*Approval, error) {
 	if method != Graceful && method != Forced {
 		return nil, errNotApproved
 	}
-	if !sameTarget(planned, current) {
+	if !sameKind(planned, current, method) || !sameTarget(planned, current) {
 		return nil, errChanged
 	}
-	if method == Graceful && !sameReach(planned, current) {
+	// Only a graceful stop that already ran excuses a changed reach
+	if (method == Graceful || !planned.GracefulAvailable) && !sameReach(planned, current) {
 		return nil, errChanged
 	}
 	return &Approval{target: current, method: method}, nil
@@ -135,13 +152,26 @@ func (a *Approval) Take(method Method) (StopTarget, error) {
 
 // sameTarget compares identity and requires a still-held named socket.
 func sameTarget(planned, current StopTarget) bool {
-	if planned.Kind == "" || planned.Kind != current.Kind {
+	if planned.Kind == "" || current.Kind == "" {
 		return false
 	}
 	if planned.Kind == KindContainer {
 		return planned.Container.Same(current.Container)
 	}
 	return planned.Root.Same(current.Root) && sharesSocket(planned.Named, current.Named)
+}
+
+// sameKind lets a forced family shrink, never grow.
+func sameKind(planned, current StopTarget, method Method) bool {
+	if method == Graceful || planned.Kind == KindContainer || current.Kind == KindContainer {
+		return planned.Kind == current.Kind
+	}
+	for _, member := range current.Members {
+		if !slices.Contains(planned.Members, member) {
+			return false
+		}
+	}
+	return len(current.Members) > 0
 }
 
 // sharesSocket reports whether any planned socket is still there.
