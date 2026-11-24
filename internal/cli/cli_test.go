@@ -32,6 +32,7 @@ type fakeApp struct {
 	asksForce bool
 	forced    bool
 	panics    bool
+	closed    bool
 }
 
 // List returns the report.
@@ -54,6 +55,9 @@ func (f *fakeApp) Plan(_ context.Context, request domain.StopRequest, expect str
 	f.request, f.expect = request, expect
 	return f.plan, f.err
 }
+
+// CanStop is true unless a test closes the gate.
+func (f *fakeApp) CanStop() bool { return !f.closed }
 
 // Execute records the run, and may ask for a force kill.
 func (f *fakeApp) Execute(ctx context.Context, plan app.Plan, confirm app.Confirm) []domain.Outcome {
@@ -326,9 +330,11 @@ func TestForceConfirmation(t *testing.T) {
 		want        bool
 		asked       int
 	}{
-		{"two yes", "y\ny\n", []string{"stop", "8000", "--force"}, true, 2},
-		{"second no", "y\nn\n", []string{"stop", "8000", "--force"}, false, 2},
-		{"second missing", "y\n", []string{"stop", "8000", "--force"}, false, 2},
+		{"typed kill", "y\nKILL\n", []string{"stop", "8000", "--force"}, true, 1},
+		{"impatient y", "y\ny\n", []string{"stop", "8000", "--force"}, false, 1},
+		{"impatient yes", "y\nyes\n", []string{"stop", "8000", "--force"}, false, 1},
+		{"second no", "y\nn\n", []string{"stop", "8000", "--force"}, false, 1},
+		{"second missing", "y\n", []string{"stop", "8000", "--force"}, false, 1},
 		{"yes flag", "", []string{"stop", "8000", "--force", "--yes"}, true, 0},
 	}
 	for _, c := range cases {
@@ -371,12 +377,75 @@ func TestCancelDuringPrompt(t *testing.T) {
 	}
 }
 
+// planID is a well-formed plan id.
+var planID = strings.Repeat("a", 32)
+
+// TestExpectNeedsAPlanID proves an empty variable never means any target.
+func TestExpectNeedsAPlanID(t *testing.T) {
+	for _, args := range [][]string{
+		{"stop", "8000", "--yes", "--force", "--expect", ""}, {"stop", "8000", "--yes", "--expect="}, {"stop", "8000", "--yes", "--expect", "zzz"},
+		{"stop", "8000", "--yes", "--expect", planID + "0"}, {"--expect", "", "stop", "8000", "--yes"},
+	} {
+		fake := &fakeApp{plan: onePlan(), outcomes: []domain.Outcome{{}}}
+		if got := invoke(t, fake, "", nil, args...); got.exit != 2 || fake.executed != 0 {
+			t.Errorf("%q: exit %d, executed %d", args, got.exit, fake.executed)
+		}
+	}
+}
+
+// TestClosedGateIsSaid never suggests a stop that would be refused.
+func TestClosedGateIsSaid(t *testing.T) {
+	closed := &fakeApp{report: sampleReport(), plan: refusedPlan(), closed: true}
+	details := invoke(t, closed, "", nil, "8000")
+	if strings.Contains(details.out, "portly stop") || !strings.Contains(details.out, stopDisabled) {
+		t.Errorf("details: %s", details.out)
+	}
+	if got := invoke(t, closed, "", nil, "stop", "22"); strings.Contains(got.err, "sudo") || !strings.Contains(got.err, stopDisabled) {
+		t.Errorf("refusal: %s", got.err)
+	}
+	if got := invoke(t, closed, "", nil, "stop", "--help"); !strings.Contains(got.out, stopDisabled) {
+		t.Errorf("help: %s", got.out)
+	}
+}
+
+// TestCobraErrorsAreUsage covers arguments of built-in commands.
+func TestCobraErrorsAreUsage(t *testing.T) {
+	for _, args := range [][]string{{"completion", "bash", "extra"}, {"-1"}, {"stop", "-5"}, {"--bogus"}, {"--bogus", "--json=true"}} {
+		got := invoke(t, &fakeApp{}, "", nil, args...)
+		if got.exit != 2 {
+			t.Errorf("%v: %+v", args, got)
+		}
+		if slices.Contains(args, "--json=true") {
+			checkDocument(t, got.out)
+		}
+	}
+}
+
+// TestNotesAreVerbose covers engine notes on stop.
+func TestNotesAreVerbose(t *testing.T) {
+	plan := refusedPlan()
+	plan.Notes = []string{"remote ignored"}
+	if got := invoke(t, &fakeApp{plan: plan}, "", nil, "stop", "22", "--verbose"); !strings.Contains(got.err, "Note: remote ignored") {
+		t.Errorf("got %s", got.err)
+	}
+}
+
+// TestCancelledTargetsSaySo covers the rest of an interrupted command.
+func TestCancelledTargetsSaySo(t *testing.T) {
+	outcomes := []domain.Outcome{{Code: domain.CodeUnknownOutcome, Delivered: true}, {Code: domain.CodeCancelled}}
+	got := invoke(t, &fakeApp{plan: samplePlan(), outcomes: outcomes}, "", nil, "stop", "8000", "5432", "22", "--yes", "--json")
+	document := checkDocument(t, got.out)
+	if status := document["results"].([]any)[1].(map[string]any)["status"]; status != "cancelled" {
+		t.Errorf("got %v", status)
+	}
+}
+
 // TestArguments covers order, protocols, flags and typos.
 func TestArguments(t *testing.T) {
 	fake := &fakeApp{plan: refusedPlan()}
-	invoke(t, fake, "", nil, "--force", "--expect", "abc", "stop", "3000", "53/udp", ":80", "--yes")
+	invoke(t, fake, "", nil, "--force", "--expect", planID, "stop", "3000", "53/udp", ":80", "--yes")
 	want := []domain.Endpoint{{Port: 3000, Protocol: domain.TCP}, {Port: 53, Protocol: domain.UDP}, {Port: 80, Protocol: domain.TCP}}
-	if !slices.Equal(fake.request.Endpoints, want) || !fake.request.Force || fake.expect != "abc" {
+	if !slices.Equal(fake.request.Endpoints, want) || !fake.request.Force || fake.expect != planID {
 		t.Errorf("got %+v %q", fake.request, fake.expect)
 	}
 	invoke(t, fake, "", nil, "--all")
@@ -391,7 +460,7 @@ func TestArguments(t *testing.T) {
 		args []string
 		hint string
 	}{
-		{[]string{"kill", "8000"}, "Did you mean 'portly stop 8000'?"}, {[]string{"8000", "x"}, "Use a number"}, {[]string{"8000", "--yes"}, "--help"},
+		{[]string{"sotp", "8000"}, "Did you mean 'portly stop 8000'?"}, {[]string{"list"}, "Run 'portly' to list"}, {[]string{"version"}, "portly --version"}, {[]string{"kill", "8000"}, "Did you mean 'portly stop 8000'?"}, {[]string{"8000", "x"}, "Use a number"}, {[]string{"8000", "--yes"}, "--help"},
 		{[]string{"--all", "8000"}, "portly --all"}, {[]string{"stop", "8000", "x"}, "Use a number"}, {[]string{"stop"}, "portly stop 8000"}, {[]string{"stop", "--all", "1"}, "--help"},
 	} {
 		planned := &fakeApp{plan: onePlan()}
@@ -404,7 +473,7 @@ func TestArguments(t *testing.T) {
 
 // TestEveryCodeIsExplained covers each refusal and result with a next step.
 func TestEveryCodeIsExplained(t *testing.T) {
-	s := &session{console: Console{Executable: "/opt/my apps/portly"}}
+	s := &session{app: &fakeApp{}, console: Console{Executable: "/opt/my apps/portly"}}
 	endpoint := domain.Endpoint{Port: 8000, Protocol: domain.TCP}
 	for _, code := range domain.Codes() {
 		_, isRefusal := reasons[code]
@@ -446,7 +515,7 @@ func TestHints(t *testing.T) {
 		{unix, tcp, unit(domain.Advice{}), "through its supervisor"},
 	}
 	for _, c := range cases {
-		s := &session{console: c.console}
+		s := &session{app: &fakeApp{}, console: c.console}
 		if got := s.explain(c.endpoint, c.refusal); !strings.Contains(got.Hint, c.want) {
 			t.Errorf("got %q, want %q", got.Hint, c.want)
 		}
@@ -499,11 +568,15 @@ type failingWriter struct{}
 // Write always fails.
 func (failingWriter) Write([]byte) (int, error) { return 0, os.ErrClosed }
 
-// TestBrokenPipe never panics.
-func TestBrokenPipe(t *testing.T) {
-	console := Console{In: strings.NewReader(""), Out: failingWriter{}, Err: failingWriter{}}
-	if exit := Run(t.Context(), []string{"--json"}, console, &fakeApp{}); exit != 1 {
-		t.Errorf("exit %d", exit)
+// TestLostOutputIsAnError proves a full disk is never success.
+func TestLostOutputIsAnError(t *testing.T) {
+	var errOut bytes.Buffer
+	console := Console{In: strings.NewReader(""), Out: failingWriter{}, Err: &errOut, Version: "v1"}
+	for _, args := range [][]string{{"--json"}, {}, {"--version"}} {
+		errOut.Reset()
+		if exit := Run(t.Context(), args, console, &fakeApp{report: sampleReport()}); exit != 1 || !strings.Contains(errOut.String(), "write output") {
+			t.Errorf("%v: exit %d, %q", args, exit, errOut.String())
+		}
 	}
 }
 

@@ -37,20 +37,24 @@ func (s *session) renderPort(port domain.PortReport, isOneOfMany bool) {
 		}
 		s.renderOwner(owner)
 	}
-	s.println(s.paint(faint, nextStep(port)))
+	s.println(s.paint(faint, s.nextStep(port)))
 }
 
 // nextStep suggests the command that fits.
-func nextStep(port domain.PortReport) string {
+func (s *session) nextStep(port domain.PortReport) string {
 	target := strconv.Itoa(int(port.Ref.Port))
 	if port.Ref.Protocol == domain.UDP {
 		target = port.Ref.String()
 	}
 	switch {
 	case port.Ambiguous:
-		return "Several owners share this port, so portly will not stop it"
+		return "Several owners share this port, so stopping it may be refused"
+	case port.Status == domain.Inaccessible && s.console.Windows:
+		return "To see the owner, run 'portly " + target + "' in an administrator terminal"
 	case port.Status == domain.Inaccessible:
-		return "Run portly as administrator to see the owner"
+		return "To see the owner:  sudo " + quote(s.console.Executable) + " " + target
+	case !s.app.CanStop():
+		return stopDisabled
 	}
 	return "Run 'portly stop " + target + "' to stop it"
 }
@@ -68,7 +72,7 @@ func (s *session) renderOwner(owner domain.Owner) {
 	case owner.Process != nil:
 		s.renderProcess(owner)
 	case owner.Access == domain.AccessDenied:
-		s.field("Process", "Permission denied")
+		s.field("Process", deniedOwner)
 		s.field("User", clean(owner.User))
 	default:
 		s.field("Process", "Unknown owner")

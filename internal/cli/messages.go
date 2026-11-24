@@ -16,7 +16,7 @@ var reasons = map[domain.Code]struct{ message, hint string }{
 	domain.CodeDescendantUnreadable: {"one of its child processes can't be checked", "Run portly as administrator, or stop the child first"},
 	domain.CodeEngineUnresponsive:   {"a container engine that may own it did not answer", "Check that Docker or Podman works, then try again"},
 	domain.CodeAmbiguous:            {"several owners share it", "Run 'portly %s' to see them, then stop the right one yourself"},
-	domain.CodeProtected:            {"it belongs to the system or to this session", "Use the system's own tools if you really need to"},
+	domain.CodeProtected:            {"it is part of the system or of the session portly runs in", "Close that program or session itself if you need the port"},
 	domain.CodeForwarder:            {"its process only forwards to something else", "Stop the container, virtual machine or remote service behind it"},
 	domain.CodeSupervised:           {"a supervisor would restart it", "Stop it through its supervisor"},
 	domain.CodeContainerManaged:     {"an orchestrator manages its container", "Stop it through Swarm, Kubernetes or systemd"},
@@ -30,7 +30,7 @@ var reasons = map[domain.Code]struct{ message, hint string }{
 	domain.CodeEngineRejected:       {"its engine can't stop it without a kill timeout", "Stop it with the engine's own command"},
 	domain.CodePlatform:             {"stopping is not verified on this platform yet", "Listing works. Use the system's own tools to stop it"},
 	domain.CodeCancelled:            {"it was cancelled", "Run the command again when ready"},
-	domain.CodeInternal:             {"of an internal error", "Run again with --verbose and report it"},
+	domain.CodeInternal:             {"of an internal error", "Please report it with the command you ran"},
 	domain.CodePermissionDenied:     {"it belongs to another user", "Run portly as that user"},
 }
 
@@ -60,14 +60,17 @@ func (s *session) explain(endpoint domain.Endpoint, refusal domain.Refusal) *dom
 
 // permission names the owner and prints the command, never runs it.
 func (s *session) permission(advice domain.Advice, port string) (string, string) {
-	message := "it belongs to another user"
+	message, hint := "it belongs to another user", ""
 	if advice.Owner != "" {
 		message += " (" + clean(advice.Owner) + ")"
+	}
+	if !s.app.CanStop() {
+		return message, stopDisabled + ", not even as administrator"
 	}
 	if s.console.Windows {
 		return message, "Run 'portly stop " + port + "' in an administrator terminal"
 	}
-	hint := "To try as administrator:  sudo " + quote(s.console.Executable) + " stop " + port
+	hint = "To try as administrator:  sudo " + quote(s.console.Executable) + " stop " + port
 	return message, hint + "  (system services like sshd are still refused)"
 }
 

@@ -11,7 +11,6 @@ import (
 
 // stop plans, shows, asks, executes and reports.
 func (s *session) stop(ctx context.Context, args []string) error {
-	s.command = "stop"
 	if len(args) == 0 {
 		return domain.NewError(domain.CodeUsage, "stop needs a port", "For example: portly stop 8000")
 	}
@@ -27,7 +26,7 @@ func (s *session) stop(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	s.diagnose(plan.Warnings, nil)
+	s.diagnose(plan.Warnings, plan.Notes)
 	// JSON never prompts, so without --yes it is a dry run
 	canAsk := s.console.Interactive && !s.options.json
 	if len(plan.Targets) > 0 && !s.options.yes && !canAsk {
@@ -69,7 +68,7 @@ func (s *session) showPlan(plan app.Plan) {
 	}
 	for _, result := range plan.Stop.Results {
 		if result.Target < 0 {
-			fmt.Fprintf(out, "  %-9s %s\n", portText(result.Endpoint), s.paint(yellow, s.explain(result.Endpoint, result.Refusal).Message))
+			fmt.Fprintf(out, "  %-9s %s\n", portText(result.Endpoint), s.paintErr(yellow, s.explain(result.Endpoint, result.Refusal).Message))
 			continue
 		}
 		target := plan.Targets[result.Target]
@@ -133,7 +132,7 @@ func (s *session) showEffects(prefix string, target app.Target) {
 		}
 	}
 	for _, effect := range effects {
-		fmt.Fprintln(s.console.Err, s.paint(yellow, "  ! "+clean(prefix+effect)))
+		fmt.Fprintln(s.console.Err, s.paintErr(yellow, "  ! "+clean(prefix+effect)))
 	}
 }
 
@@ -155,7 +154,7 @@ func targetName(target app.Target) string {
 		return name
 	}
 	if target.Process == nil {
-		return unknownProject
+		return "Unknown process"
 	}
 	return fmt.Sprintf("%s (PID %d)", clean(target.Process.Name), target.Process.PID)
 }
@@ -171,7 +170,7 @@ func (s *session) directory(target app.Target) string {
 	return s.short(target.Process.Dir)
 }
 
-// question fits one or several targets, and says when it kills.
+// question fits one or several targets. Kills are listed above it.
 func question(plan app.Plan) string {
 	if len(plan.Stop.Results) > 1 {
 		return fmt.Sprintf("Stop %d of %d?", countAllowed(plan), len(plan.Stop.Results))
@@ -199,7 +198,13 @@ func countAllowed(plan app.Plan) int {
 
 // ask reads a plain y. Anything else, or Ctrl-C, means no.
 func (s *session) ask(ctx context.Context, question string) bool {
-	fmt.Fprint(s.console.Err, question+" [y/N] ")
+	answer, isAnswered := s.read(ctx, question+" [y/N] ")
+	return isAnswered && (answer == "y" || answer == "yes")
+}
+
+// read prints a prompt and returns one lower-case line.
+func (s *session) read(ctx context.Context, prompt string) (string, bool) {
+	fmt.Fprint(s.console.Err, prompt)
 	answers := make(chan string, 1)
 	go func() {
 		line, _ := s.input.ReadString('\n')
@@ -207,11 +212,10 @@ func (s *session) ask(ctx context.Context, question string) bool {
 	}()
 	select {
 	case line := <-answers:
-		answer := strings.ToLower(strings.TrimSpace(line))
-		return answer == "y" || answer == "yes"
+		return strings.ToLower(strings.TrimSpace(line)), true
 	case <-ctx.Done():
 		fmt.Fprintln(s.console.Err)
-		return false
+		return "", false
 	}
 }
 
@@ -230,8 +234,10 @@ func (s *session) confirmForce(plan app.Plan) app.Confirm {
 				s.showTarget(plan.Targets[i])
 			}
 		}
-		fmt.Fprintln(s.console.Err, s.paint(red, "Killing it can lose unsaved data."))
-		return s.ask(ctx, "Force kill it?")
+		fmt.Fprintln(s.console.Err, s.paintErr(red, "Killing it can lose unsaved data."))
+		// A y typed while waiting must not become a kill
+		answer, isAnswered := s.read(ctx, "Type kill to force kill it: ")
+		return isAnswered && answer == "kill"
 	}
 }
 
@@ -259,9 +265,13 @@ func (s *session) printResult(plan app.Plan, result domain.PortResult, outcomes 
 		s.println(s.paint(green, fmt.Sprintf("%s %s. Port %s is free.", verb, targetName(target), portText(result.Endpoint))))
 		return
 	}
-	fmt.Fprintln(s.console.Err, clean(failure.Message)+".")
+	indent, prefix := "", s.paintErr(red, "Error: ")
+	if len(plan.Stop.Results) > 1 {
+		indent, prefix = "  ", ""
+	}
+	fmt.Fprintln(s.console.Err, prefix+clean(failure.Message)+".")
 	if failure.Hint != "" {
-		fmt.Fprintln(s.console.Err, clean(failure.Hint))
+		fmt.Fprintln(s.console.Err, indent+clean(failure.Hint))
 	}
 }
 

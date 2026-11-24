@@ -157,7 +157,7 @@
       "type": "object",
       "required": ["status", "method", "process_exited", "port_released", "resumed", "killed_pids"],
       "properties": {
-        "status": { "enum": ["stopped", "draining", "still_listening", "restarted", "taken_over", "pending", "unknown", "refused"] },
+        "status": { "enum": ["stopped", "draining", "still_listening", "restarted", "taken_over", "pending", "unknown", "cancelled", "refused"] },
         "method": { "anyOf": [{ "enum": ["graceful", "forced"] }, { "type": "null" }] },
         "process_exited": { "type": ["boolean", "null"] },
         "port_released": { "type": ["boolean", "null"] },

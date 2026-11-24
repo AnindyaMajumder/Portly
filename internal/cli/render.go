@@ -38,6 +38,14 @@ func (s *session) paint(color, text string) string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(text)
 }
 
+// paintErr colours text on stderr, which may go elsewhere.
+func (s *session) paintErr(color, text string) string {
+	if !s.console.ErrColor || text == "" {
+		return text
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(text)
+}
+
 // println prints one line of data.
 func (s *session) println(text string) { fmt.Fprintln(s.console.Out, text) }
 
@@ -59,6 +67,9 @@ const (
 	alwaysColumns  = 5
 	processColumn  = 5
 	unknownProject = "Unknown"
+	deniedOwner    = "Permission denied"
+	addressColumn  = 6
+	maxAddress     = 24
 )
 
 // renderList prints one row per owner.
@@ -128,7 +139,7 @@ func (s *session) row(port domain.PortReport, owner domain.Owner) []string {
 			directory = s.short(owner.Process.Dir)
 		}
 	case owner.Access == domain.AccessDenied:
-		process = "Permission denied"
+		process = deniedOwner
 	default:
 		process = "Unknown owner"
 	}
@@ -136,11 +147,11 @@ func (s *session) row(port domain.PortReport, owner domain.Owner) []string {
 		directory = dash
 	}
 	number, protocol := strconv.Itoa(int(port.Ref.Port)), string(port.Ref.Protocol)
-	return []string{number, protocol, project, owner.Type, pid, process, addresses(owner, " "), directory}
+	return []string{number, protocol, project, owner.Type, pid, process, addresses(owner), directory}
 }
 
 // addresses lists where an owner listens, without ports.
-func addresses(owner domain.Owner, separator string) string {
+func addresses(owner domain.Owner) string {
 	var found []string
 	seen := map[string]bool{}
 	for _, socket := range owner.Listeners {
@@ -153,7 +164,7 @@ func addresses(owner domain.Owner, separator string) string {
 	if len(found) == 0 {
 		return dash
 	}
-	return clean(strings.Join(found, separator))
+	return clean(strings.Join(found, " "))
 }
 
 // renderTable drops columns from the right until the table fits.
@@ -163,6 +174,9 @@ func (s *session) renderTable(rows [][]string) {
 		for i, cell := range cells {
 			widths[i] = max(widths[i], lipgloss.Width(cell))
 		}
+	}
+	if s.console.Width > 0 {
+		widths[addressColumn] = min(widths[addressColumn], maxAddress)
 	}
 	shown := s.fit(widths)
 	s.println(s.paint(faint, s.line(columns, widths, shown)))
@@ -188,7 +202,7 @@ func (s *session) fit(widths []int) int {
 		shown--
 	}
 	if excess := total(shown) - s.console.Width; excess > 0 {
-		widths[projectColumn] = max(minProject, widths[projectColumn]-excess)
+		widths[projectColumn] = max(min(minProject, widths[projectColumn]), widths[projectColumn]-excess)
 	}
 	return shown
 }
@@ -215,7 +229,7 @@ func (s *session) colorRow(cells []string, widths []int, shown int) string {
 			text = s.paint(blue, text)
 		case cell == dash || cell == unknownProject:
 			text = s.paint(faint, text)
-		case i == processColumn && cells[4] == dash && strings.HasPrefix(cell, "Permission"):
+		case i == processColumn && cells[4] == dash && strings.HasPrefix(cell, deniedOwner):
 			text = s.paint(yellow, text)
 		}
 		padded = append(padded, text)

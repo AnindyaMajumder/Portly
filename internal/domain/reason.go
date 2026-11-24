@@ -101,5 +101,5 @@ func AsError(err error) *Error {
 	if errors.As(err, &known) {
 		return known
 	}
-	return NewError(CodeInternal, err.Error(), "Run again with --verbose for details")
+	return NewError(CodeInternal, err.Error(), "Please report it with the command you ran")
 }

@@ -3,7 +3,7 @@ Project    Unknown
 Process    Permission denied
 User       root
 Address    0.0.0.0:22
-Run portly as administrator to see the owner
+To see the owner:  sudo /usr/local/bin/portly 22
 
 Port       5353/udp
 Project    Unknown
@@ -51,6 +51,6 @@ Project    Unknown
 Process    other (PID 7000)
 User       dev
 Address    192.168.1.2:9000
-Several owners share this port, so portly will not stop it
+Several owners share this port, so stopping it may be refused
 
 Port 9999 is free.

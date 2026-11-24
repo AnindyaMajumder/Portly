@@ -1,4 +1,4 @@
 stdout:
 stderr:
-Can't stop port 22: it belongs to another user (root).
+Error: Can't stop port 22: it belongs to another user (root).
 To try as administrator:  sudo /usr/local/bin/portly stop 22  (system services like sshd are still refused)

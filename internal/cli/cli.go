@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +25,7 @@ type UseCases interface {
 	Inspect(ctx context.Context, refs []domain.PortRef) (app.Report, error)
 	Plan(ctx context.Context, request domain.StopRequest, expect string) (app.Plan, error)
 	Execute(ctx context.Context, plan app.Plan, confirm app.Confirm) []domain.Outcome
+	CanStop() bool
 }
 
 // Console is everything outside the process, so tests can replace it.
@@ -32,6 +35,7 @@ type Console struct {
 	Err         io.Writer
 	Interactive bool
 	Color       bool
+	ErrColor    bool
 	// Zero when output is not a terminal
 	Width      int
 	Version    string
@@ -59,24 +63,69 @@ type session struct {
 	// Name used in JSON, unknown until a command runs
 	command string
 	exit    int
+	output  *checkedWriter
+}
+
+// checkedWriter remembers the first failed write, so lost output is never success.
+type checkedWriter struct {
+	writer io.Writer
+	err    error
+}
+
+// Write passes on and records failures.
+func (c *checkedWriter) Write(data []byte) (int, error) {
+	count, err := c.writer.Write(data)
+	if err != nil && c.err == nil {
+		c.err = err
+	}
+	return count, err
 }
 
 // Run executes one command line and returns the exit status.
 func Run(ctx context.Context, args []string, console Console, useCases UseCases) (exit int) {
-	s := &session{console: console, app: useCases, input: bufio.NewReader(console.In), command: "unknown"}
+	output := &checkedWriter{writer: console.Out}
+	console.Out = output
+	s := &session{console: console, app: useCases, input: bufio.NewReader(console.In), command: "unknown", output: output}
 	// Also true when flags never get parsed
-	s.options.json = slices.Contains(args, "--json")
+	s.options.json = slices.Contains(args, "--json") || slices.Contains(args, "--json=true")
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			exit = s.fail(fmt.Errorf("unexpected failure: %v", recovered))
 		}
 	}()
-	root := s.rootCommand()
-	root.SetArgs(stopFirst(args))
-	if err := root.ExecuteContext(ctx); err != nil {
+	if err := s.execute(ctx, args); err != nil {
 		return s.fail(err)
 	}
-	return s.exit
+	return s.lostOutput()
+}
+
+var negativeNumber = regexp.MustCompile(`^-[0-9]+$`)
+
+// execute runs Cobra. Its own argument errors are usage errors.
+func (s *session) execute(ctx context.Context, args []string) error {
+	if i := slices.IndexFunc(args, negativeNumber.MatchString); i >= 0 {
+		_, err := domain.ParsePortRef(args[i])
+		return err
+	}
+	root := s.rootCommand()
+	root.SetArgs(stopFirst(args))
+	err := root.ExecuteContext(ctx)
+	var known *domain.Error
+	if err != nil && s.command == "unknown" && !errors.As(err, &known) {
+		return domain.NewError(domain.CodeUsage, err.Error(), "Run 'portly --help' to see the commands")
+	}
+	return err
+}
+
+// lostOutput turns a failed write into an error. A closed pipe stays quiet.
+func (s *session) lostOutput() int {
+	if s.output.err == nil || s.exit != 0 {
+		return s.exit
+	}
+	if !errors.Is(s.output.err, syscall.EPIPE) {
+		fmt.Fprintln(s.console.Err, s.paintErr(red, "Error: ")+"can't write output: "+clean(s.output.err.Error()))
+	}
+	return domain.CodeInternal.ExitCode()
 }
 
 // stopFirst lets flags come before the stop command.
@@ -125,6 +174,11 @@ func (s *session) rootCommand() *cobra.Command {
 	return root
 }
 
+const stopDisabled = "Stopping is not enabled in this version on this platform"
+
+// An empty or malformed id must never mean "any target"
+var planIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
 // stopCommand builds portly stop.
 func (s *session) stopCommand() *cobra.Command {
 	command := &cobra.Command{
@@ -136,7 +190,16 @@ func (s *session) stopCommand() *cobra.Command {
 			"  portly stop 8000 --force          graceful first, then ask again and kill\n" +
 			"  portly stop 8000 --json           show the targets and a plan_id, stop nothing",
 		Args: cobra.ArbitraryArgs, SilenceErrors: true, SilenceUsage: true,
-		RunE: func(command *cobra.Command, args []string) error { return s.stop(command.Context(), args) },
+		RunE: func(command *cobra.Command, args []string) error {
+			s.command = "stop"
+			if command.Flags().Changed("expect") && !planIDPattern.MatchString(s.options.expect) {
+				return domain.NewError(domain.CodeUsage, "--expect needs a plan_id", "Get one with: portly stop <port> --json")
+			}
+			return s.stop(command.Context(), args)
+		},
+	}
+	if !s.app.CanStop() {
+		command.Long += "\n\n" + stopDisabled + "."
 	}
 	command.Flags().BoolVarP(&s.options.yes, "yes", "y", false, "do not ask, every check still runs")
 	command.Flags().BoolVar(&s.options.force, "force", false, "kill if a graceful stop fails, after asking again")
@@ -193,12 +256,28 @@ func parsePorts(args []string) ([]domain.PortRef, error) {
 	var refs []domain.PortRef
 	for _, arg := range args {
 		ref, err := domain.ParsePortRef(arg)
+		if suggestion := suggest(arg, args); err != nil && suggestion != "" {
+			return nil, domain.NewError(domain.CodeUsage, fmt.Sprintf("%q is not a port or command", clean(arg)), suggestion)
+		}
 		if err != nil {
 			return nil, err
 		}
 		refs = append(refs, ref)
 	}
 	return refs, nil
+}
+
+// suggest helps with words that are not commands.
+func suggest(word string, args []string) string {
+	switch word = strings.ToLower(word); {
+	case slices.Contains([]string{"list", "ls", "ps", "show"}, word):
+		return "Run 'portly' to list ports"
+	case word == "version":
+		return "Run 'portly --version'"
+	case slices.Contains([]string{"sotp", "stpo", "stp", "tsop", "stopp", "top", "sto"}, word) && len(args) > 0 && strings.EqualFold(args[0], word):
+		return "Did you mean '" + clean(strings.Join(append([]string{"portly", "stop"}, args[1:]...), " ")) + "'?"
+	}
+	return ""
 }
 
 // diagnose prints warnings always and notes with --verbose.
@@ -216,17 +295,20 @@ func (s *session) diagnose(warnings, notes []string) {
 
 // fail prints one error and returns its exit status.
 func (s *session) fail(err error) int {
+	if s.output.err != nil {
+		return s.lostOutput()
+	}
 	failure := domain.AsError(err)
 	if errors.Is(err, context.Canceled) {
 		failure = domain.NewError(domain.CodeCancelled, "Cancelled", "Nothing was stopped")
 	}
 	if s.options.json {
 		if writeErr := s.writeJSON(failureDocument(s.command, failure)); writeErr != nil {
-			return domain.CodeInternal.ExitCode()
+			return s.lostOutput()
 		}
 		return failure.Code.ExitCode()
 	}
-	fmt.Fprintln(s.console.Err, s.paint(red, "Error: ")+clean(failure.Message))
+	fmt.Fprintln(s.console.Err, s.paintErr(red, "Error: ")+clean(failure.Message))
 	if failure.Hint != "" {
 		fmt.Fprintln(s.console.Err, clean(failure.Hint))
 	}
@@ -240,9 +322,10 @@ func SystemConsole(version string) Console {
 	width, isTerminal := windowSize(os.Stdout)
 	_, isInput := windowSize(os.Stdin)
 	_, isError := windowSize(os.Stderr)
+	wantsColor := os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
 	return Console{
 		In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Interactive: isInput && isError, Width: width,
-		Color:   isTerminal && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb",
+		Color: isTerminal && wantsColor, ErrColor: isError && wantsColor,
 		Version: version, Executable: executable, Home: home, Windows: os.PathSeparator == '\\',
 	}
 }

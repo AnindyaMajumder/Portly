@@ -182,7 +182,7 @@ func reportDocument(command string, report app.Report) document {
 
 // stopDocument is the document of stop. No outcomes means nothing ran.
 func (s *session) stopDocument(plan app.Plan, outcomes []domain.Outcome) document {
-	document := newDocument("stop", plan.Warnings)
+	document := newDocument("stop", append(append([]string{}, plan.Warnings...), plan.Notes...))
 	document.PlanID = optionalString{isSet: true, value: optional(plan.Stop.ID)}
 	targets, results := []targetJSON{}, []resultJSON{}
 	for i, target := range plan.Targets {
@@ -223,7 +223,7 @@ func statusOf(outcome domain.Outcome) string {
 	switch {
 	case outcome.Code == "":
 		return "stopped"
-	case isResult:
+	case isResult || outcome.Code == domain.CodeCancelled:
 		return string(outcome.Code)
 	}
 	return "refused"
@@ -340,7 +340,7 @@ func jsonTarget(target app.Target) targetJSON {
 		encoded.Ports = append(encoded.Ports, jsonEndpoint(socket.AddressPort))
 	}
 	for _, binding := range target.Stop.Bindings {
-		encoded.Ports = append(encoded.Ports, endpointJSON{Protocol: binding.Protocol, Address: bindingAddress(binding), Port: binding.HostPort})
+		encoded.Ports = append(encoded.Ports, endpointJSON{Protocol: binding.Protocol, Address: clean(binding.Address().String()), Port: binding.HostPort})
 	}
 	for _, other := range target.Stop.Other {
 		encoded.Affected = append(encoded.Affected, jsonEndpoint(other))
@@ -349,14 +349,6 @@ func jsonTarget(target app.Target) targetJSON {
 		encoded.Children = append(encoded.Children, *jsonProcess(&child))
 	}
 	return encoded
-}
-
-// bindingAddress is empty-safe, an engine may publish on every address.
-func bindingAddress(binding domain.Binding) string {
-	if !binding.HostAddr.IsValid() {
-		return "0.0.0.0"
-	}
-	return binding.HostAddr.String()
 }
 
 // jsonEndpoint is one bound address.
