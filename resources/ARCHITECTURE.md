@@ -327,6 +327,7 @@ UDP has no listening state, so a browser looks like a server. Portly says **boun
 - Remote engines are ignored, because their ports are not local.
 - Sockets must be owned by root or the caller. Responses are size-limited.
 - **A local socket does not prove a local engine:** it can be forwarded from another machine or mounted into a container. An engine is proven local on Linux when the container's init PID exists here and its cgroup carries that container's ID. A host-network process belongs to a container only if its cgroup path is the same as that init process's, because any user can create a cgroup with that name. An engine that can't be proven local this way (a VM on macOS, Windows or Linux) counts only for a port whose host socket is held by that engine's own forwarder, recognized by the engine's socket path and the program's name. Otherwise its containers are listed as unproven and can't be stopped.
+- The list is asked first, and Podman is recognized by the `Libpod-API-Version` header of its answer. Its `/version` runs package queries that take longer than a listing may. Docker is recognized only by `/version`, and that is asked again before a stop.
 - Limits: 400 ms for listing, 3 s to connect and inspect before a stop, 10 s to wait for the container to exit.
 - Only host-published ports are listed. Exposed-only ports are not.
 - Compose labels give the project, service and directory. Host-network containers are matched through the process's cgroup.
