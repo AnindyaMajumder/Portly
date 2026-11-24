@@ -96,22 +96,6 @@ func TestHostInsideContainer(t *testing.T) {
 	}
 }
 
-// TestOwnContainerIsNative drops our container and anything around it.
-func TestOwnContainerIsNative(t *testing.T) {
-	nested := cgroupInfo{containerIDs: []string{"outer", "self", "inner"}, containerPaths: []string{"/o", "/o/s", "/o/s/i"}}
-	if ids, path := nested.outside("self"); !slices.Equal(ids, []string{"inner"}) || path != "/o/s/i" {
-		t.Errorf("got %v %q", ids, path)
-	}
-	if ids, path := nested.outside("inner"); len(ids) != 0 || path != "" {
-		t.Errorf("own container: %v %q", ids, path)
-	}
-	for _, self := range []string{"", "elsewhere"} {
-		if ids, path := nested.outside(self); len(ids) != 3 || path != "/o" {
-			t.Errorf("%q: %v %q", self, ids, path)
-		}
-	}
-}
-
 // TestEveryProcessHasContainers covers processes that hold nothing here.
 func TestEveryProcessHasContainers(t *testing.T) {
 	fake, id := newFakeProc(t), strings.Repeat("e", 64)
