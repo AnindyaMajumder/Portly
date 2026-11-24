@@ -266,6 +266,33 @@ func TestUntrustedSockets(t *testing.T) {
 	}
 }
 
+// TestClosedDirectoryKeepsItsOwner lets policy ignore another user's engine.
+func TestClosedDirectoryKeepsItsOwner(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root may read everything")
+	}
+	closed := filepath.Join(t.TempDir(), "closed")
+	if err := os.Mkdir(closed, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	end, answer := openEndpoint(filepath.Join(closed, "engine.sock"), os.Geteuid())
+	if answer != domain.AnswerDenied || end.ownerUID != fmt.Sprint(os.Geteuid()) {
+		t.Errorf("got %v owned by %q", answer, end.ownerUID)
+	}
+	if got := nearestOwner("/does/not/exist"); got != "0" {
+		t.Errorf("root directory owner: %q", got)
+	}
+}
+
+// TestHostNetworkComes from inspect, because lists may hard-code it.
+func TestHostNetworkComesFromInspect(t *testing.T) {
+	container := domain.Container{HostNet: true}
+	inspected{}.apply(&container)
+	if container.HostNet {
+		t.Error("the list was trusted")
+	}
+}
+
 // TestEndpointOrder covers host, context, remote hosts and repeats.
 func TestEndpointOrder(t *testing.T) {
 	config := t.TempDir()

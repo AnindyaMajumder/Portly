@@ -58,7 +58,7 @@ func (c *Client) Engines(ctx context.Context) ([]domain.Engine, []string) {
 func (c *Client) ask(ctx context.Context, path string) domain.Engine {
 	end, answer := openEndpoint(path, c.caller)
 	if answer != domain.AnswerOK {
-		return domain.Engine{ID: path, Answer: answer}
+		return domain.Engine{ID: path, OwnerUID: end.ownerUID, Answer: answer}
 	}
 	engine := domain.Engine{ID: end.path, OwnerUID: end.ownerUID}
 	api := newAPI(end)

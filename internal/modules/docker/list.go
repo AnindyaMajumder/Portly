@@ -196,5 +196,5 @@ func (f inspected) apply(container *domain.Container) {
 	container.Running, container.Paused = f.State.Running, f.State.Paused
 	container.InitPID, container.StopSignal = f.State.Pid, f.Config.StopSignal
 	container.AutoRemove = f.HostConfig.AutoRemove
-	container.HostNet = container.HostNet || f.HostConfig.NetworkMode == "host"
+	container.HostNet = f.HostConfig.NetworkMode == "host"
 }

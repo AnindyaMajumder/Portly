@@ -32,17 +32,32 @@ func (e environment) knownPaths() []string {
 func openEndpoint(path string, caller int) (endpoint, domain.Answer) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return endpoint{}, answerFor(err)
+		return endpoint{ownerUID: nearestOwner(path)}, answerFor(err)
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return endpoint{}, answerFor(err)
+		return endpoint{ownerUID: nearestOwner(resolved)}, answerFor(err)
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || info.Mode()&os.ModeSocket == 0 || stat.Uid != 0 && int(stat.Uid) != caller {
 		return endpoint{}, domain.AnswerAbsent
 	}
 	return endpoint{path: resolved, ownerUID: strconv.FormatUint(uint64(stat.Uid), 10)}, domain.AnswerOK
+}
+
+// nearestOwner is who closed the directory, so another user's engine can't block a stop.
+func nearestOwner(path string) string {
+	for parent := filepath.Dir(path); ; parent = filepath.Dir(parent) {
+		if info, err := os.Stat(parent); err == nil {
+			if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+				return strconv.FormatUint(uint64(stat.Uid), 10)
+			}
+			return ""
+		}
+		if parent == filepath.Dir(parent) {
+			return ""
+		}
+	}
 }
 
 // dial connects to the socket.
