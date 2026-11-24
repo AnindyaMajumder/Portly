@@ -5,6 +5,7 @@ package e2e
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -287,7 +288,7 @@ func reuse(address string) net.Listener {
 	config := net.ListenConfig{Control: func(_, _ string, conn syscall.RawConn) error {
 		return conn.Control(func(fd uintptr) { check(unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)) })
 	}}
-	listener, err := config.Listen(nil, "tcp", address)
+	listener, err := config.Listen(context.Background(), "tcp", address)
 	check(err)
 	return listener
 }
