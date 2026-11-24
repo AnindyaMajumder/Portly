@@ -322,6 +322,7 @@ UDP has no listening state, so a browser looks like a server. Portly says **boun
 ## 9. Docker and Podman
 
 - Plain HTTP over a local socket or named pipe. Podman serves the same API.
+- **Podman containers are listed but never stopped**, also not with `--force`. Podman 3.4 rejects `t=-1`, and 4.9.3 accepts it and kills the container within seconds, because the endless timeout overflows. An engine that is neither Docker nor Podman is treated the same way.
 - Endpoint order: `DOCKER_HOST`, `DOCKER_CONTEXT`, the active context, then known paths (default, rootless, Docker Desktop, Colima, OrbStack, Podman).
 - Remote engines are ignored, because their ports are not local.
 - Sockets must be owned by root or the caller. Responses are size-limited.
@@ -371,6 +372,7 @@ If an engine publishes a port, Portly never falls back to signalling a native pr
 | docker-proxy, rootlessport, rootlesskit, pasta, passt, slirp4netns, vpnkit, conmon, Docker Desktop (`com.docker.backend`), Lima, Colima, gvproxy, OrbStack, wslrelay, sshd, and ssh started by a VM manager | Refused: forwarder |
 | nodemon, pm2, supervisord, runit, s6, air, watchexec, `node --watch`, systemd, launchd, Windows services | Refused: supervised, with the right command where it is safe to print one |
 | Swarm, Kubernetes or systemd-managed container | Refused |
+| Container of Podman or an unknown engine | Refused |
 | Container whose stop signal is not known to be graceful | Refused without `--force` |
 | Being debugged, or suspended while SIGTERM is ignored or blocked | Refused: unsupported |
 | Native Windows process | Refused without `--force`: no graceful method |
@@ -563,7 +565,8 @@ Go no longer supports 32-bit macOS or 32-bit ARM Windows. Binaries are static, s
 | Graceful stop, single owner | Yes | Yes, after its gate | No |
 | Graceful stop, family | Verified families | No | No |
 | Force kill | Yes | Yes, after its gate | Yes, after its gate |
-| Containers | Yes | Yes | Yes |
+| Docker containers | Yes | Yes | Yes |
+| Podman containers | List only | List only | List only |
 
 ## 14. Quality
 
@@ -625,7 +628,8 @@ Stopping is enabled on a platform only after its gate passes there. Until then s
 | Linux | Families (gunicorn, `uvicorn --reload`, node cluster) and reloaders (Django, Flask) with real servers; behaviour without pidfd, without systemd, with restricted `/proc`, and in other namespaces |
 | macOS | The `lsof` and `netstat` cross-check finds hidden owners across users, shared sockets and overlapping addresses; a stable socket id exists; launchd domains can be read and jobs are told apart from applications |
 | Windows | A socket inherited by a child is not attributed to a parent alone; bind time detects reused PIDs, with a creation time close to the bind time treated as unresolved; the pinned handle is the process that is terminated |
-| Docker, Podman | `t=-1` never escalates, engines that reject it are refused, locality is proven, and the proxy, no-proxy and routed modes resolve as in section 9 |
+| Docker | `t=-1` never escalates, engines that reject it are refused, locality is proven, and the proxy, no-proxy and routed modes resolve as in section 9 |
+| Podman | Failed: `t=-1` ends in a kill. Stopping stays refused |
 
 | # | Point | Resolution |
 |---|---|---|
