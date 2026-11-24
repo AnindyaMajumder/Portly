@@ -38,60 +38,33 @@ func podmanRunning(c container) bool {
 	return err == nil && strings.TrimSpace(string(output)) == "true"
 }
 
-// isRejected reports an engine that does not accept t=-1.
-func isRejected(r result) bool {
-	return r.exit == 5 && r.json.Results[0].Error != nil && r.json.Results[0].Error.Code == "engine_rejected_stop"
-}
-
 // TestPodmanLookup resolves a published port to its container.
 func TestPodmanLookup(t *testing.T) {
 	c := runPodman(t, obedient)
-	got := portly(t, release, c.port, "--json")
+	var got result
+	// The first answers of a new service are slow
+	for range 10 {
+		got = portly(t, release, c.port, "--json")
+		if strings.Contains(got.stdout, c.id) {
+			break
+		}
+		time.Sleep(time.Second)
+	}
 	if got.exit != 0 || !strings.Contains(got.stdout, c.id) || !strings.Contains(got.stdout, `"type": "Podman"`) {
 		t.Errorf("exit %d\n%s", got.exit, got.stdout)
 	}
-	t.Log(strings.Contains(got.stdout, `"local": "proven"`), podman(t, "version", "--format", "{{.Client.Version}}"))
+	t.Log(podman(t, "version", "--format", "{{.Client.Version}}"), "proven local:", strings.Contains(got.stdout, `"local": "proven"`))
 }
 
-// TestPodmanStop stops the container, or leaves it alone when t=-1 is rejected.
-func TestPodmanStop(t *testing.T) {
-	c := runPodman(t, obedient)
-	got := stop(t, c.port)
-	if isRejected(got) && podmanRunning(c) {
-		t.Log("this version rejects t=-1, nothing was stopped")
-		return
-	}
-	got.expect(t, 0, "stopped")
-	if podmanRunning(c) || got.json.Targets[0].Kind != "container" {
-		t.Errorf("%+v", got.json.Targets[0])
-	}
-}
-
-// TestPodmanNeverKills proves t=-1 does not escalate.
-func TestPodmanNeverKills(t *testing.T) {
-	c := runPodman(t, stubborn)
-	got := stop(t, c.port)
-	if !isRejected(got) {
-		got.expect(t, 7, "pending")
-	}
-	time.Sleep(3 * time.Second)
-	if !podmanRunning(c) {
-		t.Error("the engine killed the container")
-	}
-}
-
-// TestPodmanForce kills only after a delivered stop failed.
-func TestPodmanForce(t *testing.T) {
-	c := runPodman(t, stubborn)
-	got := stop(t, c.port, "--force")
-	if isRejected(got) {
-		if !podmanRunning(c) {
-			t.Error("a rejected stop became a kill")
+// TestPodmanIsNeverStopped proves nothing is sent, because t=-1 can end in a kill.
+func TestPodmanIsNeverStopped(t *testing.T) {
+	for _, script := range []string{obedient, stubborn} {
+		c := runPodman(t, script)
+		for _, flags := range [][]string{nil, {"--force"}} {
+			got := stop(t, append([]string{c.port}, flags...)...)
+			if got.exit != 5 || got.json.Results[0].Error.Code != "engine_rejected_stop" || !podmanRunning(c) {
+				t.Errorf("%v: exit %d, running %v\n%s", flags, got.exit, podmanRunning(c), got.stdout)
+			}
 		}
-		return
-	}
-	got.expect(t, 0, "stopped")
-	if podmanRunning(c) || got.json.Targets[0].Outcome.Method != "forced" {
-		t.Errorf("%+v", got.json.Targets[0].Outcome)
 	}
 }

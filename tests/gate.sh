@@ -8,9 +8,20 @@ fi
 cd "$(dirname "$0")/.."
 export GOFLAGS=-buildvcs=false
 
+# sudo-rs keeps no environment, so it is passed on explicitly
+export GOCACHE="${GOCACHE:-$(go env GOCACHE)}" GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
+keep=()
+collect() {
+  local name
+  for name in PATH HOME GOFLAGS GOCACHE GOMODCACHE GOTOOLCHAIN XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS \
+    PORTLY_DOCKER_TESTS PORTLY_PODMAN_TESTS PORTLY_ROUTED_NETWORK; do
+    [ -z "${!name:-}" ] || keep+=("$name=${!name}")
+  done
+}
+
 # The runner is a system service, so tests move to their own scope
 scope() {
-  sudo -E env "PATH=$PATH" systemd-run --scope --quiet setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups "$@"
+  sudo env "${keep[@]}" systemd-run --scope --quiet setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups "$@"
 }
 
 run() {
@@ -31,22 +42,25 @@ case ${1:-} in
   hidden-proc)
     trap 'sudo mount -o remount,hidepid=off /proc' EXIT
     sudo mount -o remount,hidepid=invisible /proc
+    collect
     run scope $(tests '^TestHiddenProcesses$')
     ;;
   root)
     export PORTLY_DOCKER_TESTS=1
-    run sudo -E env "PATH=$PATH" GOCACHE=/tmp/root-go-cache systemd-run --scope --quiet \
+    collect
+    run sudo env "${keep[@]}" GOCACHE=/tmp/root-go-cache systemd-run --scope --quiet \
       $(tests '^TestDocker(HostNetwork|GracefulStop|IgnoredStopIsPending|Force)$')
     ;;
   routed)
     export PORTLY_DOCKER_TESTS=1 PORTLY_ROUTED_NETWORK=portly-routed
-    trap 'docker network rm -f portly-routed' EXIT
     docker network create -o com.docker.network.bridge.gateway_mode_ipv4=routed portly-routed
+    collect
     run scope $(tests '^TestDockerRouted$')
     ;;
   no-proxy)
     export PORTLY_DOCKER_TESTS=1
     sudo sh -c 'f=/etc/docker/daemon.json; [ -s $f ] || echo "{}" > $f; jq ".\"userland-proxy\"=false" $f > $f.new && mv $f.new $f && systemctl restart docker'
+    collect
     run scope $(tests '^TestDocker(Lookup|ReleaseRefuses|Guard|GracefulStop|IgnoredStopIsPending|Force|KillStopSignal)$')
     ;;
   podman)
@@ -54,6 +68,7 @@ case ${1:-} in
     export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
     sudo loginctl enable-linger "$(id -un)"
     timeout 30 sh -c "until [ -S '$XDG_RUNTIME_DIR/bus' ]; do sleep 1; done"
+    collect
     podman version --format '{{.Client.Version}}'
     podman pull -q docker.io/library/redis:7-alpine
     mkdir -p "$XDG_RUNTIME_DIR/podman"
