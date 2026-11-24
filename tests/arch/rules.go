@@ -7,6 +7,8 @@ import (
 	"go/parser"
 	"go/token"
 	"path"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -38,7 +40,23 @@ var libraryOwners = map[string][]string{
 var actingCalls = map[string]bool{
 	"Kill": true, "Signal": true, "PidfdOpen": true, "PidfdSendSignal": true,
 	"TerminateProcess": true, "FindProcess": true, "Tgkill": true, "GenerateConsoleCtrlEvent": true,
+	"SendSignal": true, "SendSignalWithContext": true, "KillWithContext": true, "TerminateWithContext": true,
+	"SuspendWithContext": true, "ResumeWithContext": true, "StartProcess": true, "NtTerminateProcess": true, "PtraceAttach": true,
 }
+
+// Calls that end a process without asking, only in ForceStop
+var killingNames = map[string]bool{"SIGKILL": true, "TerminateProcess": true}
+
+// Raw system calls, only where the terminal size is read
+var rawCalls = map[string]bool{"Syscall": true, "Syscall6": true, "RawSyscall": true, "RawSyscall6": true, "SyscallN": true}
+
+// Packages whose real name must stay visible at every call
+var neverRenamed = []string{"os", "os/exec", "os/signal", "syscall", "golang.org/x/sys/unix", "golang.org/x/sys/windows"}
+
+// Pure code reads no clock, file or network
+var impureImports = []string{"os", "os/exec", "os/user", "time", "net", "net/http", "io/fs", "context", "syscall"}
+
+var purePolicy = []string{"policy.go", "native.go", "container.go", "evidence.go", "names.go", "planid.go"}
 
 // source is one Go file, path relative to the repository.
 type source struct {
@@ -80,6 +98,8 @@ func check(s source) []string {
 	}
 	ast.Inspect(file, func(node ast.Node) bool {
 		switch node := node.(type) {
+		case *ast.FuncDecl:
+			checkKills(s, node, report)
 		case *ast.SelectorExpr:
 			checkSelector(s, node, report)
 		case *ast.BasicLit:
@@ -97,21 +117,51 @@ func checkSelector(s source, node *ast.SelectorExpr, report func(ast.Node, strin
 	switch {
 	case owner != nil && owner.Name == "domain" && name == "Approve" && s.layer() != "internal/modules/stopper":
 		report(node, "only stopper may approve a target")
-	case actingCalls[name] && !s.isExecutor() && !isOwnSignalSetup(owner):
+	case actingCalls[name] && !s.isExecutor() && !isSignalType(owner, name):
 		report(node, name+" is only allowed in stopper executors")
-	case owner != nil && owner.Name == "exec" && name == "Command":
+	case name == "Terminate" && s.layer() != "internal/modules/stopper":
+		report(node, "only stopper may terminate")
+	case rawCalls[name] && !strings.HasPrefix(s.path, "internal/cli/terminal_"):
+		report(node, "raw system calls are not allowed")
+	case owner != nil && owner.Name == "exec" && name != "CommandContext" && name != "ExitError":
 		report(node, "use exec.CommandContext with a deadline")
-	case owner != nil && owner.Name == "exec" && name == "CommandContext" && s.layer() != "internal/modules/discovery":
-		report(node, "only discovery may run programs")
-	case name == "Environ" && (owner == nil || owner.Name != "os"):
+	case strings.HasPrefix(name, "Environ") && (owner == nil || owner.Name != "os"):
 		report(node, "other processes' environment is never read")
+	case owner != nil && owner.Name == "runtime" && (name == "GOOS" || name == "GOARCH"):
+		report(node, "OS code belongs in suffixed files")
+	case strings.HasPrefix(s.path, "internal/modules/") && isConsoleUse(owner, name):
+		report(node, "modules do not print or exit")
 	}
 }
 
-// isOwnSignalSetup allows os/signal, which only concerns Portly itself.
-func isOwnSignalSetup(owner *ast.Ident) bool {
-	return owner != nil && (owner.Name == "os" || owner.Name == "signal")
+// isSignalType allows the os.Signal type, which sends nothing.
+func isSignalType(owner *ast.Ident, name string) bool {
+	return owner != nil && owner.Name == "os" && name == "Signal"
 }
+
+// isConsoleUse matches printing to the terminal and ending the process.
+func isConsoleUse(owner *ast.Ident, name string) bool {
+	if owner == nil {
+		return false
+	}
+	isPrint := owner.Name == "fmt" && slices.Contains([]string{"Print", "Printf", "Println"}, name)
+	return isPrint || owner.Name == "os" && slices.Contains([]string{"Exit", "Stdout", "Stderr", "Stdin"}, name) || owner.Name == "log"
+}
+
+// checkKills confines killing to ForceStop, which needs a forced approval.
+func checkKills(s source, function *ast.FuncDecl, report func(ast.Node, string)) {
+	if s.isExecutor() && function.Name.Name == "ForceStop" {
+		return
+	}
+	ast.Inspect(function, func(node ast.Node) bool {
+		if selector, ok := node.(*ast.SelectorExpr); ok && killingNames[selector.Sel.Name] {
+			report(node, selector.Sel.Name+" is only allowed in ForceStop")
+		}
+		return true
+	})
+}
+
+var engineAction = regexp.MustCompile(`(^|/)(stop|kill|restart|pause|unpause|remove|exec)\b`)
 
 // checkLiteral finds forbidden paths and programs.
 func checkLiteral(s source, node *ast.BasicLit, report func(ast.Node, string)) {
@@ -119,13 +169,14 @@ func checkLiteral(s source, node *ast.BasicLit, report func(ast.Node, string)) {
 	if node.Kind != token.STRING || err != nil {
 		return
 	}
-	isEngineAction := strings.Contains(text, "/stop") && strings.Contains(text, "?t=") || strings.HasPrefix(text, "/kill")
+	isEngineAction := s.layer() == "internal/modules/docker" && engineAction.MatchString(text)
+	isApproved := s.path == "internal/modules/docker/stop.go" && (text == "/stop?t=-1" || text == "/kill?signal=SIGKILL")
 	switch {
-	case isEngineAction && s.path != "internal/modules/docker/stop.go":
-		report(node, "engine stop and kill belong in docker/stop.go")
+	case isEngineAction && !isApproved:
+		report(node, "engine actions belong in docker/stop.go, and stop only with t=-1")
 	case text == "environ" || strings.Contains(text, "/environ") || strings.Contains(text, "procargs"):
 		report(node, "other processes' environment is never read")
-	case text == "/usr/bin/sudo" || text == "/bin/sudo":
+	case text == "sudo" || strings.HasSuffix(text, "/sudo"):
 		report(node, "Portly never runs sudo")
 	}
 }
@@ -139,6 +190,9 @@ func checkImports(s source, file *ast.File) []string {
 	var problems []string
 	for _, spec := range file.Imports {
 		name, _ := strconv.Unquote(spec.Path.Value)
+		if problem := importProblem(s, name, spec.Name != nil); problem != "" {
+			problems = append(problems, s.path+": "+problem)
+		}
 		local, isLocal := strings.CutPrefix(name, module)
 		if isLocal && !hasAnyPrefix(local, allowed) {
 			problems = append(problems, fmt.Sprintf("%s: %s must not import %s", s.path, s.layer(), local))
@@ -154,6 +208,31 @@ func checkImports(s source, file *ast.File) []string {
 		}
 	}
 	return problems
+}
+
+// importProblem covers cgo, running programs, renaming and pure code.
+func importProblem(s source, name string, isRenamed bool) string {
+	isPure := s.layer() == "internal/domain" || s.layer() == "internal/modules/stopper" && slices.Contains(purePolicy, path.Base(s.path))
+	switch {
+	case name == "C":
+		return "cgo is not allowed"
+	case name == "os/exec" && !s.isTest() && s.layer() != "internal/modules/discovery":
+		return "only discovery may run programs"
+	case isRenamed && slices.Contains(neverRenamed, name):
+		return "do not rename " + name
+	case isPure && !s.isTest() && slices.Contains(impureImports, name):
+		return "pure code must not import " + name
+	case strings.HasPrefix(name, "golang.org/x/sys/") && !s.isTest() && !hasOSSuffix(s.path):
+		return "OS code belongs in suffixed files"
+	}
+	return ""
+}
+
+// hasOSSuffix matches files only one system compiles.
+func hasOSSuffix(path string) bool {
+	return slices.ContainsFunc([]string{"_linux.go", "_darwin.go", "_windows.go", "_unix.go"}, func(suffix string) bool {
+		return strings.HasSuffix(path, suffix)
+	})
 }
 
 // libraryProblem explains why a library is not allowed, or is empty.
