@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AnindyaMajumder/Portly/schema/portly.v1.schema.json",
+  "title": "Portly JSON output, version 1",
+  "description": "Every --json command prints exactly one of these documents. Fields may be added within 1.x, never changed or removed. Inaccessible values are null.",
+  "type": "object",
+  "required": ["schema_version", "command", "error", "warnings"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "command": { "enum": ["list", "inspect", "stop", "unknown"] },
+    "error": { "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }] },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+    "hidden_udp": { "type": "integer", "minimum": 0 },
+    "plan_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{32}$" },
+    "targets": { "type": "array", "items": { "$ref": "#/$defs/target" } },
+    "results": { "type": "array", "items": { "$ref": "#/$defs/result" } }
+  },
+  "$defs": {
+    "code": {
+      "enum": [
+        "internal", "usage", "not_listening",
+        "permission_denied", "unresolved_owner", "evidence_unavailable", "evidence_unstable",
+        "descendant_unreadable", "engine_unresponsive",
+        "ambiguous_owner", "protected_process", "port_forwarder", "supervised_process",
+        "container_managed", "container_unproven", "container_self", "refused_with_other_port",
+        "target_changed", "no_graceful_method", "being_debugged", "stop_signal_blocked",
+        "engine_rejected_stop", "platform_unverified",
+        "confirmation_required", "cancelled",
+        "draining", "still_listening", "restarted", "taken_over", "pending", "unknown"
+      ]
+    },
+    "completeness": { "enum": ["complete", "partial", "unavailable"] },
+    "protocol": { "enum": ["tcp", "udp"] },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "hint"],
+      "properties": {
+        "code": { "$ref": "#/$defs/code" },
+        "message": { "type": "string" },
+        "hint": { "type": ["string", "null"] }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["source", "completeness"],
+      "properties": {
+        "source": { "type": "string" },
+        "completeness": { "$ref": "#/$defs/completeness" }
+      }
+    },
+    "listener": {
+      "type": "object",
+      "required": ["protocol", "family", "address", "port", "completeness", "evidence"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "family": { "enum": ["ipv4", "ipv6"] },
+        "address": { "type": "string" },
+        "port": { "$ref": "#/$defs/portNumber" },
+        "connected": { "type": "boolean" },
+        "completeness": { "$ref": "#/$defs/completeness" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["protocol", "address", "port"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "address": { "type": "string" },
+        "port": { "$ref": "#/$defs/portNumber" }
+      }
+    },
+    "portNumber": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "process": {
+      "type": "object",
+      "required": ["pid", "name", "user", "command", "executable", "directory"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 1 },
+        "name": { "type": ["string", "null"] },
+        "user": { "type": ["string", "null"] },
+        "command": { "type": ["string", "null"] },
+        "executable": { "type": ["string", "null"] },
+        "directory": { "type": ["string", "null"] }
+      }
+    },
+    "container": {
+      "type": "object",
+      "required": ["id", "name", "image", "engine", "compose_project", "compose_service", "directory", "local"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "image": { "type": ["string", "null"] },
+        "engine": { "type": "string" },
+        "compose_project": { "type": ["string", "null"] },
+        "compose_service": { "type": ["string", "null"] },
+        "directory": { "type": ["string", "null"] },
+        "local": { "enum": ["proven", "unproven"] }
+      }
+    },
+    "project": {
+      "type": "object",
+      "required": ["name", "root", "confidence", "evidence"],
+      "properties": {
+        "name": { "type": "string" },
+        "root": { "type": ["string", "null"] },
+        "confidence": { "enum": ["high", "medium"] },
+        "evidence": { "type": "string" }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "required": ["type", "access", "user", "process", "container", "project", "workers", "listeners"],
+      "properties": {
+        "type": { "type": "string" },
+        "access": { "enum": ["ok", "permission_denied", "unknown"] },
+        "user": { "type": ["string", "null"] },
+        "process": { "anyOf": [{ "$ref": "#/$defs/process" }, { "type": "null" }] },
+        "container": { "anyOf": [{ "$ref": "#/$defs/container" }, { "type": "null" }] },
+        "project": { "anyOf": [{ "$ref": "#/$defs/project" }, { "type": "null" }] },
+        "workers": { "type": "array", "items": { "type": "integer", "minimum": 1 } },
+        "listeners": { "type": "array", "items": { "$ref": "#/$defs/listener" } }
+      }
+    },
+    "port": {
+      "type": "object",
+      "required": ["port", "protocol", "status", "ambiguous", "owners"],
+      "properties": {
+        "port": { "$ref": "#/$defs/portNumber" },
+        "protocol": { "anyOf": [{ "$ref": "#/$defs/protocol" }, { "type": "null" }] },
+        "status": { "enum": ["listening", "published", "not_listening", "inaccessible"] },
+        "ambiguous": { "type": "boolean" },
+        "owners": { "type": "array", "items": { "$ref": "#/$defs/owner" } }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["kind", "process", "container", "project", "ports", "affected", "children", "suspended", "paused", "auto_remove", "reloader", "shared_network", "graceful", "outcome"],
+      "properties": {
+        "kind": { "enum": ["process", "family", "container"] },
+        "process": { "anyOf": [{ "$ref": "#/$defs/process" }, { "type": "null" }] },
+        "container": { "anyOf": [{ "$ref": "#/$defs/container" }, { "type": "null" }] },
+        "project": { "anyOf": [{ "$ref": "#/$defs/project" }, { "type": "null" }] },
+        "ports": { "type": "array", "items": { "$ref": "#/$defs/endpoint" } },
+        "affected": { "type": "array", "items": { "$ref": "#/$defs/endpoint" } },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/process" } },
+        "suspended": { "type": "boolean" },
+        "paused": { "type": "boolean" },
+        "auto_remove": { "type": "boolean" },
+        "reloader": { "type": "boolean" },
+        "shared_network": { "type": "array", "items": { "type": "string" } },
+        "graceful": { "type": "boolean" },
+        "outcome": { "anyOf": [{ "$ref": "#/$defs/outcome" }, { "type": "null" }] }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "required": ["status", "method", "process_exited", "port_released", "resumed", "killed_pids"],
+      "properties": {
+        "status": { "enum": ["stopped", "draining", "still_listening", "restarted", "taken_over", "pending", "unknown", "refused"] },
+        "method": { "anyOf": [{ "enum": ["graceful", "forced"] }, { "type": "null" }] },
+        "process_exited": { "type": ["boolean", "null"] },
+        "port_released": { "type": ["boolean", "null"] },
+        "resumed": { "type": "boolean" },
+        "killed_pids": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["port", "protocol", "status", "target", "error"],
+      "properties": {
+        "port": { "$ref": "#/$defs/portNumber" },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "status": { "enum": ["stopped", "allowed", "refused", "not_listening", "draining", "still_listening", "restarted", "taken_over", "pending", "unknown", "cancelled"] },
+        "target": { "type": ["integer", "null"], "minimum": 0 },
+        "error": { "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }] }
+      }
+    }
+  }
+}
