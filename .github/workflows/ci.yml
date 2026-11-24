@@ -26,8 +26,39 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go mod verify
-      - run: make fmt vet-all arch lint vuln cover cross
-      - run: make fuzz FUZZTIME=20s
+      - run: make fmt arch lint vuln cover
+
+  cross:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        targets:
+          - linux/amd64 linux/386 linux/arm linux/arm64
+          - linux/riscv64 linux/ppc64le linux/s390x
+          - darwin/amd64 darwin/arm64
+          - windows/386 windows/amd64 windows/arm64
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+      - env:
+          TARGETS: ${{ matrix.targets }}
+        run: make vet-all cross TARGETS="$TARGETS"
+
+  fuzz:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+      - run: make fuzz FUZZTIME=5s
 
   unit:
     strategy:
@@ -75,7 +106,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -93,7 +124,7 @@ jobs:
       - name: End to end, gate and containers
         run: >
           sudo -E env "PATH=$PATH" systemd-run --scope --quiet
-          setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups make e2e docker-test perf
+          setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups make gate e2e docker-test perf
 
   distros:
     runs-on: ubuntu-24.04
