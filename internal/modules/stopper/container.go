@@ -2,7 +2,9 @@ package stopper
 
 import (
 	"net/netip"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/AnindyaMajumder/Portly/internal/domain"
@@ -14,12 +16,14 @@ type publisher struct {
 	container domain.Container
 }
 
-// publishersOf lists running containers publishing an endpoint.
+// publishersOf lists running containers publishing an endpoint, each once.
 func publishersOf(snapshot domain.Snapshot, endpoint domain.Endpoint) []publisher {
 	var found []publisher
 	for _, engine := range snapshot.Engines {
 		for _, container := range engine.Containers {
-			if container.Running && len(container.Publishes(endpoint)) > 0 {
+			isKnown := slices.ContainsFunc(found, func(p publisher) bool { return p.container.ID == container.ID })
+			if container.Running && len(container.Publishes(endpoint)) > 0 && !isKnown {
+				container.Engine = engine.ID
 				found = append(found, publisher{engine, container})
 			}
 		}
@@ -33,6 +37,9 @@ func resolvePublished(snapshot domain.Snapshot, result resolution, sockets []dom
 		return result.refuse(domain.CodeAmbiguous)
 	}
 	owner := publishers[0]
+	if hasSilentEngine(snapshot, owner.engine.OwnerUID) {
+		return result.refuse(domain.CodeEngineUnresponsive)
+	}
 	isLocal := isProvenLocal(snapshot, owner.container)
 	bindings := owner.container.Publishes(result.endpoint)
 	for _, socket := range sockets {
@@ -63,6 +70,7 @@ func resolveHostNetwork(snapshot domain.Snapshot, result resolution, sockets []d
 			if container.ID != id || !container.Running || !container.HostNet {
 				continue
 			}
+			container.Engine = engine.ID
 			result.containers = append(result.containers, container.Ref())
 			if !isProvenLocal(snapshot, container) {
 				return result.refuse(domain.CodeContainerUnproven)
@@ -124,12 +132,23 @@ func containerTarget(container domain.Container) domain.StopTarget {
 	return target
 }
 
-// hasGracefulSignal rejects stop signals that can't be handled.
+// Anything else is treated as unable to stop gracefully
+var gracefulSignals = []string{"", "TERM", "INT", "QUIT", "HUP", "USR1", "USR2", "WINCH"}
+
+// HUP, INT, QUIT and TERM have the same number on every CPU
+var gracefulNumbers = []int{1, 2, 3, 15}
+
+// hasGracefulSignal accepts only known signals, because engines parse numbers loosely.
 func hasGracefulSignal(signal string) bool {
 	name := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(signal)), "SIG")
-	// 9 is KILL, and STOP is 19, 17 or 23 depending on the CPU
-	return !slices.Contains([]string{"KILL", "STOP", "9", "17", "19", "23"}, name)
+	if number, err := strconv.Atoi(name); err == nil {
+		return slices.Contains(gracefulNumbers, number)
+	}
+	return slices.Contains(gracefulSignals, name) || realTimeSignal.MatchString(name)
 }
+
+// systemd images use SIGRTMIN+3
+var realTimeSignal = regexp.MustCompile(`^RT(MIN(\+[0-9]{1,2})?|MAX(-[0-9]{1,2})?)$`)
 
 // isProvenLocal requires the init process here, inside that container's cgroup.
 func isProvenLocal(snapshot domain.Snapshot, container domain.Container) bool {
@@ -147,7 +166,7 @@ func isExplained(snapshot domain.Snapshot, engine domain.Engine, bindings []doma
 	}
 	for _, holder := range socket.Holders {
 		process, known := snapshot.Processes[holder.PID]
-		if !known || process.UserID != engine.OwnerUID || !isEngineProcess(process) {
+		if !known || process.UserID != engine.OwnerUID || !matchesAny(programNames(process), holderNames(engine, isLocal)) {
 			return false
 		}
 	}

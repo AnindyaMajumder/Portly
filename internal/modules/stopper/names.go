@@ -20,10 +20,24 @@ var forwarderNames = []string{
 
 var vmManagerNames = []string{"limactl", "lima", "colima", "podman", "orbstack", "vagrant"}
 
-// Processes that hold a published port on behalf of an engine
+// Processes that hold a published port for an engine on this machine
 var engineNames = []string{
 	"dockerd", "docker-proxy", "podman", "conmon", "rootlessport", "rootlessport-child", "rootlesskit", "pasta",
-	"pasta.avx2", "slirp4netns", "com.docker.backend", "com.docker.vpnkit", "limactl", "gvproxy", "orbstack", "orbstack helper",
+	"pasta.avx2", "slirp4netns",
+}
+
+// An engine in a VM counts only through its own forwarder
+var vmForwarders = []struct {
+	socket string
+	names  []string
+}{
+	{"/.docker/run/", []string{"com.docker.backend", "com.docker.vpnkit"}},
+	{"/.docker/desktop/", []string{"com.docker.backend", "com.docker.vpnkit"}},
+	{"/.orbstack/run/", []string{"orbstack", "orbstack helper"}},
+	{"/.colima/", []string{"limactl"}},
+	{"/podman/machine/", []string{"gvproxy"}},
+	{`\\.\pipe\docker`, []string{"com.docker.backend"}},
+	{`\\.\pipe\podman-machine`, []string{"gvproxy", "wslrelay"}},
 }
 
 var supervisorNames = []string{
@@ -44,14 +58,33 @@ func isForwarder(process domain.Process, ancestors []domain.Process) bool {
 	if !matchesAny(names, []string{"ssh"}) {
 		return false
 	}
+	// A shared VM connection detaches, so only its arguments tell
+	if slices.ContainsFunc(process.Args, isVMConnection) {
+		return true
+	}
 	return slices.ContainsFunc(ancestors, func(ancestor domain.Process) bool {
 		return matchesAny(programNames(ancestor), vmManagerNames)
 	})
 }
 
-// isEngineProcess matches a holder that may explain a published port.
-func isEngineProcess(process domain.Process) bool {
-	return matchesAny(programNames(process), engineNames)
+// isVMConnection matches ssh titles and options of VM managers.
+func isVMConnection(argument string) bool {
+	return strings.Contains(argument, "[mux]") || slices.ContainsFunc(vmManagerNames, func(name string) bool {
+		return strings.Contains(strings.ToLower(argument), name)
+	})
+}
+
+// holderNames lists programs that may hold a published port for an engine.
+func holderNames(engine domain.Engine, isLocal bool) []string {
+	if isLocal {
+		return engineNames
+	}
+	for _, forwarder := range vmForwarders {
+		if strings.Contains(engine.ID, forwarder.socket) {
+			return forwarder.names
+		}
+	}
+	return nil
 }
 
 // isSupervisor matches programs that restart what they run.

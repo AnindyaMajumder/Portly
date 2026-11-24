@@ -101,6 +101,16 @@ var refusalCases = []struct {
 	{"sshd title", func(s *domain.Snapshot) {
 		change(s, appPID, func(p *domain.Process) { p.Args = []string{"sshd: dev@pts/0"} })
 	}, domain.CodeForwarder},
+	{"vm ssh mux", func(s *domain.Snapshot) {
+		change(s, appPID, func(p *domain.Process) {
+			p.Name, p.Args = "ssh", []string{"ssh: /Users/dev/.lima/default/ssh.sock [mux]"}
+		})
+	}, domain.CodeForwarder},
+	{"vm ssh by path", func(s *domain.Snapshot) {
+		change(s, appPID, func(p *domain.Process) {
+			p.Name, p.Args = "ssh", []string{"ssh", "-F", "/Users/dev/.colima/ssh_config"}
+		})
+	}, domain.CodeForwarder},
 	{"vm ssh", func(s *domain.Snapshot) {
 		change(s, shellPID, func(p *domain.Process) { p.Name = "limactl" })
 		change(s, appPID, func(p *domain.Process) { p.Name = "ssh" })

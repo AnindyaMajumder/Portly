@@ -88,6 +88,9 @@ func resolve(snapshot domain.Snapshot, endpoint domain.Endpoint, isForced bool, 
 	if state.Stable != domain.Yes {
 		return result.refuse(domain.CodeEvidenceUnstable)
 	}
+	if snapshot.Host.ProcessTable != domain.Complete {
+		return result.refuse(domain.CodeEvidenceUnavailable)
+	}
 	if len(publishers) > 0 {
 		return resolvePublished(snapshot, result, sockets, publishers, isForced)
 	}
@@ -210,6 +213,7 @@ func addReach(snapshot domain.Snapshot, target *domain.StopTarget) {
 		target.Other = slices.DeleteFunc(target.Other, func(other domain.AddressPort) bool {
 			return slices.ContainsFunc(target.Bindings, func(named domain.Binding) bool { return named.Endpoint() == other.Endpoint })
 		})
+		addContainerReach(snapshot, target)
 		return
 	}
 	affected := []int{target.Root.PID}
@@ -226,6 +230,25 @@ func addReach(snapshot domain.Snapshot, target *domain.StopTarget) {
 		}
 	}
 	domain.SortAddresses(target.Other)
+}
+
+// addContainerReach adds host-network sockets and processes of a container.
+func addContainerReach(snapshot domain.Snapshot, target *domain.StopTarget) {
+	isInside := func(pid int) bool {
+		return slices.Contains(snapshot.Processes[pid].ContainerIDs, target.Container.ID)
+	}
+	for _, socket := range snapshot.Sockets {
+		if slices.ContainsFunc(socket.Holders, func(holder domain.Holder) bool { return isInside(holder.PID) }) {
+			addOther(snapshot.Host, target, socket)
+		}
+	}
+	domain.SortAddresses(target.Other)
+	for pid, process := range snapshot.Processes {
+		if isInside(pid) && !process.Zombie {
+			target.Children = append(target.Children, process.ProcessID)
+		}
+	}
+	slices.SortFunc(target.Children, func(a, b domain.ProcessID) int { return a.PID - b.PID })
 }
 
 // addOther skips named sockets and UDP noise.

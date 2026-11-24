@@ -64,21 +64,26 @@ func engineProblem(snapshot domain.Snapshot, process domain.Process) domain.Code
 	if snapshot.EnginesSeen != domain.Complete {
 		return domain.CodeEngineUnresponsive
 	}
-	for _, engine := range snapshot.Engines {
-		isSilent := engine.Answer == domain.AnswerTimeout || engine.Answer == domain.AnswerMalformed ||
-			engine.Answer == domain.AnswerUnobserved || engine.Answer == domain.AnswerDenied
-		if isSilent && (engine.OwnerUID == "" || engine.OwnerUID == process.UserID) {
-			return domain.CodeEngineUnresponsive
-		}
+	if hasSilentEngine(snapshot, process.UserID) {
+		return domain.CodeEngineUnresponsive
 	}
 	return ""
 }
 
+// hasSilentEngine finds an engine of this user that could own the port.
+func hasSilentEngine(snapshot domain.Snapshot, userID string) bool {
+	for _, engine := range snapshot.Engines {
+		isSilent := engine.Answer == domain.AnswerTimeout || engine.Answer == domain.AnswerMalformed ||
+			engine.Answer == domain.AnswerUnobserved || engine.Answer == domain.AnswerDenied
+		if isSilent && (engine.OwnerUID == "" || engine.OwnerUID == userID) {
+			return true
+		}
+	}
+	return false
+}
+
 // descendantProblem blocks when a child's sockets could not be read.
 func descendantProblem(snapshot domain.Snapshot, pid int) domain.Code {
-	if snapshot.Host.ProcessTable != domain.Complete {
-		return domain.CodeEvidenceUnavailable
-	}
 	for _, descendant := range snapshot.Descendants(pid) {
 		process := snapshot.Processes[descendant]
 		if !process.Zombie && process.Sockets != domain.Complete {

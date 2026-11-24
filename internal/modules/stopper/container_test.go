@@ -126,10 +126,81 @@ func TestVisibleProxyIsExplained(t *testing.T) {
 	if plan := ask(snapshot, web); len(plan.Targets) != 1 || plan.Targets[0].Kind != domain.KindContainer {
 		t.Errorf("refused with %q", codeOf(plan))
 	}
-	// A VM engine counts only through its own forwarder
+	// The same proxy explains nothing for an engine that may be elsewhere
 	delete(snapshot.Processes, initPID)
-	if plan := ask(snapshot, web); len(plan.Targets) != 1 {
-		t.Errorf("forwarder of an unproven engine: %q", codeOf(plan))
+	if got := codeOf(ask(snapshot, web)); got != domain.CodeAmbiguous {
+		t.Errorf("proxy of an unproven engine: %q", got)
+	}
+}
+
+// TestVMEngineNeedsItsOwnForwarder covers engines that can't be proven local.
+func TestVMEngineNeedsItsOwnForwarder(t *testing.T) {
+	cases := []struct {
+		socket, holder string
+		want           domain.Code
+	}{
+		{"/Users/dev/.docker/run/docker.sock", "com.docker.backend", ""},
+		{"/home/dev/.docker/desktop/docker.sock", "com.docker.backend", ""},
+		{"/Users/dev/.orbstack/run/docker.sock", "OrbStack Helper", ""},
+		{"/Users/dev/.colima/default/docker.sock", "limactl", ""},
+		{"/Users/dev/.docker/run/docker.sock", "gvproxy", domain.CodeAmbiguous},
+		{"/Users/dev/.docker/run/docker.sock", "rootlessport", domain.CodeAmbiguous},
+		{"/tmp/forwarded.sock", "com.docker.backend", domain.CodeAmbiguous},
+		{"/tmp/forwarded.sock", "rootlessport", domain.CodeAmbiguous},
+	}
+	for _, c := range cases {
+		snapshot := world()
+		published(&snapshot)
+		delete(snapshot.Processes, initPID)
+		snapshot.Engines[0].ID, snapshot.Engines[0].OwnerUID = c.socket, "1000"
+		change(&snapshot, appPID, func(p *domain.Process) { p.Name, p.Exe, p.Args = c.holder, "/x/"+c.holder, nil })
+		snapshot.Sockets = []domain.Socket{listener(web, "77", appPID)}
+		if got := codeOf(ask(snapshot, web)); got != c.want {
+			t.Errorf("%s through %s: got %q, want %q", c.socket, c.holder, got, c.want)
+		}
+	}
+}
+
+// TestSilentEngineBlocksPublishedPorts covers a second engine of the same user.
+func TestSilentEngineBlocksPublishedPorts(t *testing.T) {
+	for owner, want := range map[string]domain.Code{"0": domain.CodeEngineUnresponsive, "": domain.CodeEngineUnresponsive, "1000": ""} {
+		snapshot := world()
+		published(&snapshot)
+		snapshot.Engines = append(snapshot.Engines, domain.Engine{ID: "silent", OwnerUID: owner, Answer: domain.AnswerTimeout})
+		if got := codeOf(ask(snapshot, web)); got != want {
+			t.Errorf("owner %q: %q", owner, got)
+		}
+	}
+}
+
+// TestSameContainerFromTwoSocketsIsOne covers two paths to one engine.
+func TestSameContainerFromTwoSocketsIsOne(t *testing.T) {
+	snapshot := world()
+	published(&snapshot)
+	second := snapshot.Engines[0]
+	second.ID = "engine-2"
+	snapshot.Engines = append(snapshot.Engines, second)
+	plan := ask(snapshot, web)
+	if len(plan.Targets) != 1 || plan.Targets[0].Container.Engine != "engine-1" {
+		t.Errorf("got %+v, %q", plan.Targets, codeOf(plan))
+	}
+}
+
+// TestHostNetworkReach shows every endpoint and process of the container.
+func TestHostNetworkReach(t *testing.T) {
+	snapshot := world()
+	published(&snapshot)
+	editContainer(&snapshot, func(c *domain.Container) { c.Ports, c.HostNet = nil, true })
+	change(&snapshot, appPID, func(p *domain.Process) { p.ContainerIDs = []string{dbID} })
+	snapshot.Sockets = []domain.Socket{listener(web, "77", appPID)}
+	before := ask(snapshot, web)
+	snapshot.Sockets = append(snapshot.Sockets, listener(api, "78", appPID))
+	after := ask(snapshot, web)
+	if len(after.Targets) != 1 || len(after.Targets[0].Other) != 1 || after.Targets[0].Other[0].Port != 9000 {
+		t.Fatalf("got %+v", after.Targets)
+	}
+	if len(after.Targets[0].Children) != 2 || after.Targets[0].Children[0].PID != appPID || before.ID == after.ID {
+		t.Errorf("children %+v, ids %s %s", after.Targets[0].Children, before.ID, after.ID)
 	}
 }
 
@@ -218,8 +289,9 @@ func TestForcedContainerWithoutGracefulSignal(t *testing.T) {
 // TestGracefulSignals covers names, numbers and defaults.
 func TestGracefulSignals(t *testing.T) {
 	for signal, want := range map[string]bool{
-		"": true, "SIGTERM": true, "15": true, "SIGINT": true, "SIGQUIT": true,
-		"SIGKILL": false, "kill": false, "9": false, " SIGKILL ": false, "SIGSTOP": false, "19": false,
+		"": true, "SIGTERM": true, "15": true, "015": true, "SIGINT": true, "SIGQUIT": true, "SIGRTMIN+3": true, "RTMAX-1": true, "SIGWINCH": true,
+		"SIGKILL": false, "kill": false, "9": false, "09": false, "+9": false, " 9 ": false, "0x9": false, " SIGKILL ": false,
+		"SIGSTOP": false, "19": false, "019": false, "17": false, "0": false, "-1": false, "SIGSOMETHING": false, "RTMIN+999": false,
 	} {
 		if got := hasGracefulSignal(signal); got != want {
 			t.Errorf("%q: %v", signal, got)
