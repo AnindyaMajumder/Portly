@@ -13,12 +13,12 @@ func TestClean(t *testing.T) {
 		"plain":              "plain",
 		"\x1b[31mred\x1b[0m": "?[31mred?[0m",
 		"a\nb\rc\td":         "a?b?c?d",
-		"safe‮gnp.exe":       "safegnp.exe",
-		"zero​width":         "zerowidth",
+		"safe\u202egnp.exe":  "safegnp.exe",
+		"zero\u200bwidth":    "zerowidth",
 		"bad\xffutf8":        "bad?utf8",
 		"日本語-ok":             "日本語-ok",
 		"c1\u009b31m":        "c1?31m",
-		"line sep end":       "linesepend",
+		"line\u2028sep end":  "linesepend",
 	}
 	for input, want := range cases {
 		if got := Clean(input); got != want {

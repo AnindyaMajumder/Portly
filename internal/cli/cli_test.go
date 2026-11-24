@@ -461,7 +461,7 @@ func TestHints(t *testing.T) {
 // TestHostileNamesAreCleaned covers every output.
 func TestHostileNamesAreCleaned(t *testing.T) {
 	report := sampleReport()
-	evil := "\x1b]0;owned\a‮"
+	evil := "\x1b]0;owned\a\u202e"
 	owner := &report.Ports[4].Owners[0]
 	owner.Process.Name, owner.Process.Dir, owner.Process.User, owner.Project.Name = evil, "/"+evil, evil, evil
 	owner.Process.Args = []string{evil}
@@ -471,7 +471,7 @@ func TestHostileNamesAreCleaned(t *testing.T) {
 	plan.Targets[1].Stop.SharesNet = []string{evil}
 	for _, args := range [][]string{{}, {"8000"}, {"--json"}, {"stop", "8000"}, {"stop", "8000", "--json"}, {"stop", "8000", "--yes"}, {evil}, {"kill", evil}} {
 		got := invoke(t, &fakeApp{report: report, plan: plan, outcomes: sampleOutcomes()}, "y\n", interactive, args...)
-		if strings.ContainsAny(got.out+got.err, "\x1b\a‮") {
+		if strings.ContainsAny(got.out+got.err, "\x1b\a\u202e") {
 			t.Errorf("%v leaked control characters", args)
 		}
 	}

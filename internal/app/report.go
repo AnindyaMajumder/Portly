@@ -104,7 +104,7 @@ func visibleEndpoints(snapshot domain.Snapshot) []domain.Endpoint {
 
 // describe finds every owner of one endpoint, for display only.
 func describe(snapshot domain.Snapshot, endpoint domain.Endpoint) domain.PortReport {
-	report := domain.PortReport{Ref: domain.PortRef{Port: endpoint.Port, Protocol: endpoint.Protocol}, Status: domain.Listening}
+	report := domain.PortReport{Ref: domain.PortRef(endpoint), Status: domain.Listening}
 	sockets := snapshot.On(endpoint)
 	owners, rest := containerOwners(snapshot, endpoint, sockets)
 	owners = append(owners, nativeOwners(snapshot, rest)...)

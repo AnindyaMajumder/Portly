@@ -67,12 +67,14 @@ func (s *Stopper) replacement(ctx context.Context, planned domain.StopTarget, be
 		return domain.CodeUnknownOutcome
 	}
 	for _, endpoint := range endpointsOf(planned) {
-		for _, next := range publishersOf(now, endpoint) {
-			if next.container.Name == nameOf(before, planned.Container) {
-				return domain.CodeRestarted
-			}
-			return domain.CodeTakenOver
+		next := publishersOf(now, endpoint)
+		if len(next) == 0 {
+			continue
 		}
+		if next[0].container.Name == nameOf(before, planned.Container) {
+			return domain.CodeRestarted
+		}
+		return domain.CodeTakenOver
 	}
 	return ""
 }
