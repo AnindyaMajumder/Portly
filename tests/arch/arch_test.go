@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TestRepositoryFollowsTheRules checks every Go file.
 func TestRepositoryFollowsTheRules(t *testing.T) {
 	root := os.DirFS("../..")
 	checked := 0
@@ -35,9 +36,10 @@ func TestRepositoryFollowsTheRules(t *testing.T) {
 	}
 }
 
+// TestRulesCatchViolations plants one violation per rule.
 func TestRulesCatchViolations(t *testing.T) {
 	importing := func(name string) string { return "package x\nimport _ \"" + name + "\"\n" }
-	body := func(code string) string { return "package x\nfunc f() {\n" + code + "\n}\n" }
+	body := func(code string) string { return "package x\n// f acts.\nfunc f() {\n" + code + "\n}\n" }
 	cases := []struct{ name, path, text string }{
 		{"module imports module", "internal/modules/docker/a.go", importing(module + "internal/modules/stopper")},
 		{"domain imports app", "internal/domain/a.go", importing(module + "internal/app")},
@@ -48,6 +50,7 @@ func TestRulesCatchViolations(t *testing.T) {
 		{"gopsutil in shared file", "internal/modules/discovery/a.go", importing("github.com/shirou/gopsutil/v4/process")},
 		{"unapproved library", "internal/cli/a.go", importing("example.com/x")},
 		{"long comment", "internal/domain/a.go", "package x\n// a\n// b\n// c\n"},
+		{"function without comment", "internal/domain/a.go", "package x\nfunc f() {}\n"},
 		{"block comment", "internal/domain/a.go", "package x\n/* a */\n"},
 		{"signal in policy", "internal/modules/stopper/policy.go", body("unix.Kill(1, 9)")},
 		{"signal in discovery", "internal/modules/discovery/a_linux.go", body("p.Signal(nil)")},
@@ -73,8 +76,9 @@ func TestRulesCatchViolations(t *testing.T) {
 	}
 }
 
+// TestRulesAllowTheDesign proves the intended code passes.
 func TestRulesAllowTheDesign(t *testing.T) {
-	body := func(code string) string { return "package x\nfunc f() {\n" + code + "\n}\n" }
+	body := func(code string) string { return "package x\n// f acts.\nfunc f() {\n" + code + "\n}\n" }
 	cases := []source{
 		{"internal/modules/stopper/exec_linux.go", body("unix.PidfdSendSignal(1, 15, nil, 0)")},
 		{"internal/modules/stopper/run.go", body("domain.Approve(a, b, c)")},

@@ -46,12 +46,15 @@ type source struct {
 	text string
 }
 
+// layer is the package directory.
 func (s source) layer() string { return path.Dir(s.path) }
 
+// isTest covers test files and the tests directory.
 func (s source) isTest() bool {
 	return strings.HasPrefix(s.path, "tests/") || strings.HasSuffix(s.path, "_test.go")
 }
 
+// isExecutor covers the only files that may signal.
 func (s source) isExecutor() bool {
 	return s.layer() == "internal/modules/stopper" && strings.HasPrefix(path.Base(s.path), "exec_")
 }
@@ -60,10 +63,11 @@ func (s source) isExecutor() bool {
 func check(s source) []string {
 	problems := checkComments(s)
 	files := token.NewFileSet()
-	file, err := parser.ParseFile(files, s.path, s.text, parser.SkipObjectResolution)
+	file, err := parser.ParseFile(files, s.path, s.text, parser.SkipObjectResolution|parser.ParseComments)
 	if err != nil {
 		return append(problems, err.Error())
 	}
+	problems = append(problems, checkFunctionComments(s, files, file)...)
 	if strings.HasPrefix(s.path, "tests/") {
 		return problems
 	}
@@ -86,6 +90,7 @@ func check(s source) []string {
 	return problems
 }
 
+// checkSelector finds calls that belong to another layer.
 func checkSelector(s source, node *ast.SelectorExpr, report func(ast.Node, string)) {
 	owner, _ := node.X.(*ast.Ident)
 	name := node.Sel.Name
@@ -103,17 +108,18 @@ func checkSelector(s source, node *ast.SelectorExpr, report func(ast.Node, strin
 	}
 }
 
-// The container executor and its interface are called Kill too
+// isContainerKill allows the container executor and its interface.
 func isContainerKill(s source, name string) bool {
 	isStopLayer := s.path == "internal/modules/docker/stop.go" || s.path == "internal/modules/stopper/run.go"
 	return name == "Kill" && isStopLayer
 }
 
-// os/signal and os.Signal only concern Portly itself
+// isOwnSignalSetup allows os/signal, which only concerns Portly itself.
 func isOwnSignalSetup(owner *ast.Ident) bool {
 	return owner != nil && (owner.Name == "os" || owner.Name == "signal")
 }
 
+// checkLiteral finds forbidden paths and programs.
 func checkLiteral(s source, node *ast.BasicLit, report func(ast.Node, string)) {
 	text, err := strconv.Unquote(node.Value)
 	if node.Kind != token.STRING || err != nil {
@@ -130,6 +136,7 @@ func checkLiteral(s source, node *ast.BasicLit, report func(ast.Node, string)) {
 	}
 }
 
+// checkImports enforces direction and library ownership.
 func checkImports(s source, file *ast.File) []string {
 	allowed, known := allowedImports[s.layer()]
 	if !known {
@@ -155,6 +162,7 @@ func checkImports(s source, file *ast.File) []string {
 	return problems
 }
 
+// libraryProblem explains why a library is not allowed, or is empty.
 func libraryProblem(s source, name string) string {
 	if !strings.Contains(strings.SplitN(name, "/", 2)[0], ".") {
 		return ""
@@ -175,6 +183,7 @@ func libraryProblem(s source, name string) string {
 	return "unapproved dependency " + name
 }
 
+// checkComments enforces the two-line limit.
 func checkComments(s source) []string {
 	var problems []string
 	run := 0
@@ -189,6 +198,18 @@ func checkComments(s source) []string {
 		}
 		if run++; run == 3 {
 			problems = append(problems, fmt.Sprintf("%s:%d: comment block over 2 lines", s.path, i+1))
+		}
+	}
+	return problems
+}
+
+// checkFunctionComments requires every function to say what it does.
+func checkFunctionComments(s source, files *token.FileSet, file *ast.File) []string {
+	var problems []string
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if ok && (function.Doc == nil || strings.TrimSpace(function.Doc.Text()) == "") {
+			problems = append(problems, fmt.Sprintf("%s: %s needs a comment", files.Position(function.Pos()), function.Name.Name))
 		}
 	}
 	return problems
