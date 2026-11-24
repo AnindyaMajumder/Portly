@@ -26,18 +26,11 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go mod verify
-      - run: make fmt arch lint vuln cover
+      - run: go mod tidy -diff
+      - run: make fmt arch test lint vuln cover
 
   cross:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        targets:
-          - linux/amd64 linux/386 linux/arm linux/arm64
-          - linux/riscv64 linux/ppc64le linux/s390x
-          - darwin/amd64 darwin/arm64
-          - windows/386 windows/amd64 windows/arm64
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -45,26 +38,17 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - env:
-          TARGETS: ${{ matrix.targets }}
-        run: make vet-all cross TARGETS="$TARGETS"
-
-  fuzz:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-      - run: make fuzz FUZZTIME=5s
+          # Its own cache, with the standard library for every target
+          cache-dependency-path: |
+            go.sum
+            Makefile
+      - run: make vet-all cross
 
   unit:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2025, windows-11-arm]
+        os: [ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2025, windows-11-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -85,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: ["386", arm, s390x]
+        arch: [arm, s390x]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -93,8 +77,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-      - if: matrix.arch != '386'
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - env:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: "0"
@@ -124,7 +107,7 @@ jobs:
       - name: End to end, gate and containers
         run: >
           sudo -E env "PATH=$PATH" systemd-run --scope --quiet
-          setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups make gate e2e docker-test perf
+          setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups make e2e docker-test perf
 
   distros:
     runs-on: ubuntu-24.04

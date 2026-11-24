@@ -34,7 +34,7 @@ test: ## Unit tests with race detector
 	CGO_ENABLED=1 go test -race -count=1 ./internal/... ./cmd/...
 
 e2e: ## Real listeners and real stops, only of processes the tests start
-	go test -count=1 -p 1 -timeout 10m ./tests/e2e
+	go test -count=1 -p 1 -timeout 10m -v ./tests/e2e
 
 gate: ## Evidence gate tests with real servers, shows what was skipped
 	go test -count=1 -timeout 10m -run TestGate -v ./tests/e2e
@@ -70,7 +70,7 @@ snapshot: ## Local release build with an installed GoReleaser, publishes nothing
 
 cross: ## Build every release target
 	@for target in $(TARGETS); do echo "build $$target"; GOOS=$${target%/*} GOARCH=$${target#*/} GOARM=6 \
-		go build -trimpath -o /dev/null ./cmd/portly || exit 1; done
+		go build -o /dev/null ./cmd/portly || exit 1; done
 
 check: fmt vet arch test build ## Quick gate
 
