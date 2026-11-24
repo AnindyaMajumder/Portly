@@ -6,7 +6,7 @@ TARGETS := linux/386 linux/amd64 linux/arm linux/arm64 linux/riscv64 linux/ppc64
 export CGO_ENABLED ?= 0
 
 .DEFAULT_GOAL := help
-.PHONY: help build fmt vet arch test e2e cross check
+.PHONY: help build fmt vet arch test e2e docker-test cross check
 
 help: ## List targets
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "%-13s %s\n", $$1, $$2}'
@@ -28,6 +28,9 @@ test: ## Unit tests with race detector
 
 e2e: ## Real listeners and real stops, only of processes the tests start
 	go test -count=1 -p 1 -timeout 10m ./tests/e2e
+
+docker-test: ## Throwaway containers only
+	PORTLY_DOCKER_TESTS=1 go test -count=1 -p 1 -timeout 10m -run TestDocker -v ./tests/e2e
 
 cross: ## Build every release target
 	@for target in $(TARGETS); do echo "build $$target"; GOOS=$${target%/*} GOARCH=$${target#*/} GOARM=6 \
