@@ -1,12 +1,12 @@
-╭──────┬───────┬─────────┬────────┬──────┬───────────────────┬───────────────╮
-│ PORT │ PROTO │ PROJECT │ TYPE   │ PID  │ PROCESS           │ ADDRESS       │
-├──────┼───────┼─────────┼────────┼──────┼───────────────────┼───────────────┤
-│ 22   │ tcp   │ Unknown │ Native │ —    │ Permission denied │ 0.0.0.0       │
-│ 5353 │ udp   │ Unknown │ Native │ —    │ Unknown owner     │ 0.0.0.0       │
-│ 5432 │ tcp   │ shop    │ Docker │ —    │ shop-db-1         │ 127.0.0.1     │
-│ 6000 │ tcp   │ Unknown │ Podman │ —    │ cache             │ —             │
-│ 8000 │ tcp   │ shop    │ Python │ 6182 │ uvicorn           │ 127.0.0.1 ::1 │
-│ 9000 │ tcp   │ shop    │ Python │ 6182 │ uvicorn           │ 127.0.0.1 ::1 │
-│ 9000 │ tcp   │ Unknown │ Native │ 7000 │ other             │ 192.168.1.2   │
-╰──────┴───────┴─────────┴────────┴──────┴───────────────────┴───────────────╯
+╭──────┬───────┬─────────┬────────┬──────┬───────────────────┬───────────╮
+│ PORT │ PROTO │ PROJECT │ TYPE   │ PID  │ PROCESS           │ DIRECTORY │
+├──────┼───────┼─────────┼────────┼──────┼───────────────────┼───────────┤
+│ 22   │ tcp   │ Unknown │ Native │ —    │ Permission denied │ —         │
+│ 5353 │ udp   │ Unknown │ Native │ —    │ Unknown owner     │ —         │
+│ 5432 │ tcp   │ shop    │ Docker │ —    │ shop-db-1         │ ~/shop    │
+│ 6000 │ tcp   │ Unknown │ Podman │ —    │ cache             │ —         │
+│ 8000 │ tcp   │ shop    │ Python │ 6182 │ uvicorn           │ ~/shop    │
+│ 9000 │ tcp   │ shop    │ Python │ 6182 │ uvicorn           │ ~/shop    │
+│ 9000 │ tcp   │ Unknown │ Native │ 7000 │ other             │ —         │
+╰──────┴───────┴─────────┴────────┴──────┴───────────────────┴───────────╯
 6 ports found · 3 UDP hidden (portly --all) · Run 'portly 5432' for details

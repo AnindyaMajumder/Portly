@@ -1,12 +1,12 @@
-[90m╭──────┬───────┬─────────┬────────┬──────┬───────────────────┬───────────────╮[m
-[90m│ PORT │ PROTO │ PROJECT │ TYPE   │ PID  │ PROCESS           │ ADDRESS       │[m
-[90m├──────┼───────┼─────────┼────────┼──────┼───────────────────┼───────────────┤[m
-[90m│ [m[34m22  [m[90m │ [mtcp  [90m │ [m[90mUnknown[m[90m │ [mNative[90m │ [m[90m—   [m[90m │ [m[33mPermission denied[m[90m │ [m0.0.0.0      [90m │[m
-[90m│ [m[34m5353[m[90m │ [mudp  [90m │ [m[90mUnknown[m[90m │ [mNative[90m │ [m[90m—   [m[90m │ [mUnknown owner    [90m │ [m0.0.0.0      [90m │[m
-[90m│ [m[34m5432[m[90m │ [mtcp  [90m │ [mshop   [90m │ [mDocker[90m │ [m[90m—   [m[90m │ [mshop-db-1        [90m │ [m127.0.0.1    [90m │[m
-[90m│ [m[34m6000[m[90m │ [mtcp  [90m │ [m[90mUnknown[m[90m │ [mPodman[90m │ [m[90m—   [m[90m │ [mcache            [90m │ [m[90m—            [m[90m │[m
-[90m│ [m[34m8000[m[90m │ [mtcp  [90m │ [mshop   [90m │ [mPython[90m │ [m6182[90m │ [muvicorn          [90m │ [m127.0.0.1 ::1[90m │[m
-[90m│ [m[34m9000[m[90m │ [mtcp  [90m │ [mshop   [90m │ [mPython[90m │ [m6182[90m │ [muvicorn          [90m │ [m127.0.0.1 ::1[90m │[m
-[90m│ [m[34m9000[m[90m │ [mtcp  [90m │ [m[90mUnknown[m[90m │ [mNative[90m │ [m7000[90m │ [mother            [90m │ [m192.168.1.2  [90m │[m
-[90m╰──────┴───────┴─────────┴────────┴──────┴───────────────────┴───────────────╯[m
+[90m╭──────┬───────┬─────────┬────────┬──────┬───────────────────┬───────────╮[m
+[90m│ PORT │ PROTO │ PROJECT │ TYPE   │ PID  │ PROCESS           │ DIRECTORY │[m
+[90m├──────┼───────┼─────────┼────────┼──────┼───────────────────┼───────────┤[m
+[90m│ [m[34m22  [m[90m │ [mtcp  [90m │ [m[90mUnknown[m[90m │ [mNative[90m │ [m[90m—   [m[90m │ [m[33mPermission denied[m[90m │ [m[90m—        [m[90m │[m
+[90m│ [m[34m5353[m[90m │ [mudp  [90m │ [m[90mUnknown[m[90m │ [mNative[90m │ [m[90m—   [m[90m │ [mUnknown owner    [90m │ [m[90m—        [m[90m │[m
+[90m│ [m[34m5432[m[90m │ [mtcp  [90m │ [mshop   [90m │ [mDocker[90m │ [m[90m—   [m[90m │ [mshop-db-1        [90m │ [m~/shop   [90m │[m
+[90m│ [m[34m6000[m[90m │ [mtcp  [90m │ [m[90mUnknown[m[90m │ [mPodman[90m │ [m[90m—   [m[90m │ [mcache            [90m │ [m[90m—        [m[90m │[m
+[90m│ [m[34m8000[m[90m │ [mtcp  [90m │ [mshop   [90m │ [mPython[90m │ [m6182[90m │ [muvicorn          [90m │ [m~/shop   [90m │[m
+[90m│ [m[34m9000[m[90m │ [mtcp  [90m │ [mshop   [90m │ [mPython[90m │ [m6182[90m │ [muvicorn          [90m │ [m~/shop   [90m │[m
+[90m│ [m[34m9000[m[90m │ [mtcp  [90m │ [m[90mUnknown[m[90m │ [mNative[90m │ [m7000[90m │ [mother            [90m │ [m[90m—        [m[90m │[m
+[90m╰──────┴───────┴─────────┴────────┴──────┴───────────────────┴───────────╯[m
 [90m6 ports found · 3 UDP hidden (portly --all) · Run 'portly 5432' for details[m

@@ -40,7 +40,9 @@ type Console struct {
 	Color       bool
 	ErrColor    bool
 	// Zero when output is not a terminal
-	Width      int
+	Width int
+	// TERM=dumb: no box drawing
+	Plain      bool
 	Version    string
 	Executable string
 	Home       string
@@ -331,7 +333,7 @@ func SystemConsole(version string) Console {
 	wantsColor := os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
 	return Console{
 		In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Interactive: isInput && isError, Width: width,
-		Color: isTerminal && wantsColor, ErrColor: isError && wantsColor,
+		Color: isTerminal && wantsColor, ErrColor: isError && wantsColor, Plain: os.Getenv("TERM") == "dumb",
 		Version: version, Executable: executable, Home: home, Windows: os.PathSeparator == '\\',
 	}
 }

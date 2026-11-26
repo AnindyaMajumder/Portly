@@ -60,12 +60,11 @@ func (s *session) short(path string) string {
 	return clean(path)
 }
 
-// columns of the list. The first five always show.
+// columns of the list. The first five always show, see columnSets.
 var columns = []string{"PORT", "PROTO", "PROJECT", "TYPE", "PID", "PROCESS", "ADDRESS", "DIRECTORY"}
 
 const (
 	projectColumn   = 2
-	alwaysColumns   = 5
 	processColumn   = 5
 	unknownProject  = "Unknown"
 	deniedOwner     = "Permission denied"
@@ -169,7 +168,7 @@ func addresses(owner domain.Owner) string {
 	return clean(strings.Join(found, " "))
 }
 
-// renderTable drops columns from the right until the table fits.
+// renderTable prints the rows in the widest layout that fits.
 func (s *session) renderTable(rows [][]string) {
 	widths := make([]int, len(columns))
 	for _, cells := range append([][]string{columns}, rows...) {
@@ -180,107 +179,118 @@ func (s *session) renderTable(rows [][]string) {
 	if s.console.Width > 0 {
 		widths[addressColumn] = min(widths[addressColumn], maxAddress)
 	}
-	shown := s.fit(widths)
-	isFramed := s.frame().left != ""
+	l := s.arrange(widths)
+	isFramed := l.frame.left != ""
 	if isFramed {
-		s.println(s.rule("╭", "┬", "╮", widths[:shown]))
+		s.println(s.rule("╭", "┬", "╮", l))
 	}
-	s.println(s.paint(faint, s.line(columns, widths, shown)))
+	s.println(s.paint(faint, l.line(columns)))
 	if isFramed {
-		s.println(s.rule("├", "┼", "┤", widths[:shown]))
+		s.println(s.rule("├", "┼", "┤", l))
 	}
 	for _, cells := range rows {
-		s.println(s.colorRow(cells, widths, shown))
+		s.println(s.colorRow(cells, l))
 	}
 	if isFramed {
-		s.println(s.rule("╰", "┴", "╯", widths[:shown]))
+		s.println(s.rule("╰", "┴", "╯", l))
 	}
 }
 
 // frame is the border around a table on a terminal. Piped output has none.
 type frame struct{ left, gap, right string }
 
-// frame picks the border for this console.
-func (s *session) frame() frame {
-	if s.console.Width == 0 {
-		return frame{gap: strings.Repeat(" ", columnGap)}
-	}
-	return frame{left: "│ ", gap: " │ ", right: " │"}
+var (
+	boxed = frame{left: "│ ", gap: " │ ", right: " │"}
+	plain = frame{gap: strings.Repeat(" ", columnGap)}
+)
+
+// layout is which columns show, how wide, and inside which border.
+type layout struct {
+	frame  frame
+	shown  []int
+	widths []int
 }
 
-// width is how many cells the border takes around some columns.
-func (f frame) width(shown int) int {
-	return lipgloss.Width(f.left) + lipgloss.Width(f.right) + lipgloss.Width(f.gap)*(shown-1)
+// Column sets to try, widest first. DIRECTORY outlasts ADDRESS.
+var columnSets = [][]int{{0, 1, 2, 3, 4, 5, 6, 7}, {0, 1, 2, 3, 4, 5, 7}, {0, 1, 2, 3, 4, 5, 6}, {0, 1, 2, 3, 4, 5}, {0, 1, 2, 3, 4}}
+
+// arrange picks a border and the widest set of columns that fits, narrowing the project last.
+func (s *session) arrange(widths []int) layout {
+	if s.console.Width == 0 {
+		return layout{plain, columnSets[0], widths}
+	}
+	narrowest := columnSets[len(columnSets)-1]
+	f := boxed
+	if s.console.Plain || boxed.total(narrowest, widths) > s.console.Width {
+		f = plain
+	}
+	for _, set := range columnSets {
+		room := s.console.Width - f.total(set, widths)
+		if room >= 0 {
+			return layout{f, set, widths}
+		}
+		// A long directory takes the room left instead of disappearing
+		if set[len(set)-1] == directoryColumn && widths[directoryColumn]+room >= minDirectory {
+			widths[directoryColumn] += room
+			return layout{f, set, widths}
+		}
+	}
+	excess := f.total(narrowest, widths) - s.console.Width
+	widths[projectColumn] = max(min(minProject, widths[projectColumn]), widths[projectColumn]-excess)
+	return layout{f, narrowest, widths}
+}
+
+// total is the width of some columns inside the border.
+func (f frame) total(set []int, widths []int) int {
+	sum := lipgloss.Width(f.left) + lipgloss.Width(f.right) + lipgloss.Width(f.gap)*(len(set)-1)
+	for _, column := range set {
+		sum += widths[column]
+	}
+	return sum
 }
 
 // rule draws a horizontal border line with its corners and joints.
-func (s *session) rule(left, joint, right string, widths []int) string {
+func (s *session) rule(left, joint, right string, l layout) string {
 	var parts []string
-	for _, width := range widths {
-		parts = append(parts, strings.Repeat("─", width+2))
+	for _, column := range l.shown {
+		parts = append(parts, strings.Repeat("─", l.widths[column]+2))
 	}
 	return s.paint(faint, left+strings.Join(parts, joint)+right)
 }
 
-// fit returns how many columns show, and narrows the project as a last resort.
-func (s *session) fit(widths []int) int {
-	if s.console.Width == 0 {
-		return len(widths)
-	}
-	total := func(shown int) int {
-		sum := s.frame().width(shown)
-		for _, width := range widths[:shown] {
-			sum += width
-		}
-		return sum
-	}
-	shown := len(widths)
-	for shown > alwaysColumns && total(shown) > s.console.Width {
-		shown--
-	}
-	// A long directory takes the room left instead of disappearing
-	if room := s.console.Width - total(directoryColumn+1) + widths[directoryColumn]; shown == directoryColumn && room >= minDirectory {
-		widths[directoryColumn], shown = room, directoryColumn+1
-	}
-	if excess := total(shown) - s.console.Width; excess > 0 {
-		widths[projectColumn] = max(min(minProject, widths[projectColumn]), widths[projectColumn]-excess)
-	}
-	return shown
-}
-
 // line joins padded cells inside the border.
-func (s *session) line(cells []string, widths []int, shown int) string {
+func (l layout) line(cells []string) string {
 	var padded []string
-	for i, cell := range cells[:shown] {
-		padded = append(padded, fitCell(i, cell, widths[i]))
+	for _, column := range l.shown {
+		padded = append(padded, fitCell(column, cells[column], l.widths[column]))
 	}
-	f := s.frame()
-	text := f.left + strings.Join(padded, f.gap) + f.right
-	if f.left == "" {
+	text := l.frame.left + strings.Join(padded, l.frame.gap) + l.frame.right
+	if l.frame.left == "" {
 		return strings.TrimRight(text, " ")
 	}
 	return text
 }
 
 // colorRow highlights the port and dims what could not be read.
-func (s *session) colorRow(cells []string, widths []int, shown int) string {
+func (s *session) colorRow(cells []string, l layout) string {
 	if !s.console.Color {
-		return s.line(cells, widths, shown)
+		return l.line(cells)
 	}
 	var padded []string
-	for i, cell := range cells[:shown] {
-		text := fitCell(i, cell, widths[i])
+	for _, column := range l.shown {
+		cell := cells[column]
+		text := fitCell(column, cell, l.widths[column])
 		switch {
-		case i == 0:
+		case column == 0:
 			text = s.paint(blue, text)
 		case cell == dash || cell == unknownProject:
 			text = s.paint(faint, text)
-		case i == processColumn && cells[4] == dash && strings.HasPrefix(cell, deniedOwner):
+		case column == processColumn && cells[4] == dash && strings.HasPrefix(cell, deniedOwner):
 			text = s.paint(yellow, text)
 		}
 		padded = append(padded, text)
 	}
-	f := s.frame()
+	f := l.frame
 	return s.paint(faint, f.left) + strings.Join(padded, s.paint(faint, f.gap)) + s.paint(faint, f.right)
 }
 

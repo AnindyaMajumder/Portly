@@ -692,9 +692,9 @@ func TestLongDirectoryIsShortened(t *testing.T) {
 	}
 }
 
-// TestFramedLinesLineUp draws every table line at one width within the terminal.
+// TestFramedLinesLineUp draws every table line at one width, or plain columns when a frame can't fit.
 func TestFramedLinesLineUp(t *testing.T) {
-	for _, columns := range []int{60, 80, 100, 120, 160} {
+	for _, columns := range []int{40, 60, 80, 100, 120, 160} {
 		got := invoke(t, &fakeApp{report: sampleReport()}, "", func(c *Console) { c.Width = columns })
 		var widths []int
 		for line := range strings.Lines(got.out) {
@@ -702,9 +702,22 @@ func TestFramedLinesLineUp(t *testing.T) {
 				widths = append(widths, len([]rune(strings.TrimRight(line, "\n"))))
 			}
 		}
-		if len(widths) == 0 || slices.Max(widths) != slices.Min(widths) || widths[0] > columns {
+		isPlain := len(widths) == 0 && columns < 45
+		if !isPlain && (len(widths) == 0 || slices.Max(widths) != slices.Min(widths) || widths[0] > columns) {
 			t.Errorf("%d columns: widths %v\n%s", columns, widths, got.out)
 		}
+	}
+	dumb := invoke(t, &fakeApp{report: sampleReport()}, "", func(c *Console) { c.Width, c.Plain = 120, true })
+	if strings.ContainsAny(dumb.out, "│╭├╰") {
+		t.Errorf("TERM=dumb drew a frame:\n%s", dumb.out)
+	}
+}
+
+// TestDirectoryOutlastsAddress keeps the project's folder when only one of the two fits.
+func TestDirectoryOutlastsAddress(t *testing.T) {
+	got := invoke(t, &fakeApp{report: sampleReport()}, "", func(c *Console) { c.Width = 80 })
+	if !strings.Contains(got.out, "DIRECTORY") || strings.Contains(got.out, "ADDRESS") {
+		t.Errorf("at 80 columns:\n%s", got.out)
 	}
 }
 
