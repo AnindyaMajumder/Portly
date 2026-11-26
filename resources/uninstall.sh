@@ -21,11 +21,13 @@ if [ ! -f "$directory/$binary" ]; then
   case $found in
     "") fail "portly is not installed in $directory" ;;
     /usr/bin/* | /usr/sbin/* | /bin/* | /sbin/*) fail "a package manager installed $found. Remove it with: $(package_remove)" ;;
-    *) fail "portly is in $(dirname "$found"), not $directory. Run this script again with PORTLY_INSTALL_DIR=$(dirname "$found")" ;;
+    *) fail "portly is in $(dirname "$found"), not $directory. To remove it from there:
+  curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.sh | PORTLY_INSTALL_DIR='$(dirname "$found")' sh" ;;
   esac
 fi
 "$directory/$binary" --version 2>/dev/null | grep -q '^portly ' || fail "$directory/$binary is not portly, so it was left alone"
-rm -f "$directory/$binary" "$directory/$binary.old"
+rm -f "$directory/$binary" "$directory/$binary".old* 2>/dev/null ||
+  fail "can't remove $directory/$binary. To remove it as administrator: sudo rm '$directory/$binary'"
 # Only the Windows folder belongs to Portly alone
 [ "$binary" = portly.exe ] && rmdir "$directory" 2>/dev/null || true
 echo "Removed portly from $directory"

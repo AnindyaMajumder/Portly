@@ -33,19 +33,21 @@ case $(uname -m) in
 esac
 
 version=${PORTLY_VERSION:-}
+version=${version#v}
 if [ -z "$version" ]; then
   version=$(curl -fsSLI --proto '=https' -o /dev/null -w '%{url_effective}' "$repository/releases/latest")
   version=${version##*/v}
 fi
 case $version in
-  "" | *[!0-9A-Za-z.-]*) fail "could not find the latest version" ;;
+  "" | *[!0-9A-Za-z.-]*) fail "could not find the latest release, see $repository/releases" ;;
 esac
 
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 archive="portly_${version}_${os}_${arch}.${extension}"
 for file in "$archive" checksums.txt; do
-  curl -fsSL --proto '=https' -o "$temporary/$file" "$repository/releases/download/v$version/$file" || fail "could not download $file"
+  curl -fsSL --proto '=https' -o "$temporary/$file" "$repository/releases/download/v$version/$file" ||
+    fail "could not download $file. Check PORTLY_VERSION and your connection, or see $repository/releases"
 done
 
 expected=$(awk -v name="$archive" '$2 == name { print $1 }' "$temporary/checksums.txt")
@@ -66,5 +68,13 @@ mv "$temporary/$binary" "$directory/$binary"
 echo "Installed portly $version in $directory"
 case ":$PATH:" in
   *":$directory:"*) ;;
-  *) echo "Add $directory to your PATH" ;;
+  *)
+    case ${SHELL:-} in
+      */zsh) profile="$HOME/.zshrc" ;;
+      */bash) profile="$HOME/.bashrc" ;;
+      *) profile="$HOME/.profile" ;;
+    esac
+    echo "$directory is not on your PATH. Add it, then open a new terminal:"
+    echo "  echo 'export PATH=\"$directory:\$PATH\"' >> $profile"
+    ;;
 esac
