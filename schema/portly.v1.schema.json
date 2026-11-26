@@ -7,14 +7,15 @@
   "required": ["schema_version", "command", "error", "warnings"],
   "properties": {
     "schema_version": { "const": "1" },
-    "command": { "enum": ["list", "inspect", "stop", "unknown"] },
+    "command": { "enum": ["list", "inspect", "stop", "update", "unknown"] },
     "error": { "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }] },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
     "hidden_udp": { "type": "integer", "minimum": 0 },
     "plan_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{32}$" },
     "targets": { "type": "array", "items": { "$ref": "#/$defs/target" } },
-    "results": { "type": "array", "items": { "$ref": "#/$defs/result" } }
+    "results": { "type": "array", "items": { "$ref": "#/$defs/result" } },
+    "update": { "$ref": "#/$defs/update" }
   },
   "$defs": {
     "code": {
@@ -27,6 +28,7 @@
         "target_changed", "no_graceful_method", "being_debugged", "stop_signal_blocked",
         "engine_rejected_stop", "platform_unverified",
         "confirmation_required", "cancelled",
+        "update_unavailable", "checksum_mismatch", "package_managed", "dev_build",
         "draining", "still_listening", "restarted", "taken_over", "pending", "unknown"
       ]
     },
@@ -174,6 +176,15 @@
         "status": { "enum": ["stopped", "allowed", "refused", "not_listening", "draining", "still_listening", "restarted", "taken_over", "pending", "unknown", "cancelled"] },
         "target": { "type": ["integer", "null"], "minimum": 0 },
         "error": { "anyOf": [{ "$ref": "#/$defs/error" }, { "type": "null" }] }
+      }
+    },
+    "update": {
+      "type": "object",
+      "required": ["current", "latest", "status"],
+      "properties": {
+        "current": { "type": "string" },
+        "latest": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "status": { "enum": ["updated", "up_to_date", "confirmation_required"] }
       }
     }
   }

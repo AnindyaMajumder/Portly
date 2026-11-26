@@ -478,7 +478,8 @@ func TestEveryCodeIsExplained(t *testing.T) {
 	for _, code := range domain.Codes() {
 		_, isRefusal := reasons[code]
 		_, isResult := results[code]
-		isCommandLevel := code == domain.CodeUsage || code == domain.CodeNotListening || code == domain.CodeConfirmationRequired
+		isCommandLevel := slices.Contains([]domain.Code{domain.CodeUsage, domain.CodeNotListening, domain.CodeConfirmationRequired,
+			domain.CodeUpdateUnavailable, domain.CodeChecksumMismatch, domain.CodePackageManaged, domain.CodeDevBuild}, code)
 		if !isRefusal && !isResult && !isCommandLevel {
 			t.Errorf("%s has no explanation", code)
 		}

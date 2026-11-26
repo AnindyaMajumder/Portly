@@ -35,6 +35,11 @@ const (
 	CodeConfirmationRequired Code = "confirmation_required"
 	CodeCancelled            Code = "cancelled"
 
+	CodeUpdateUnavailable Code = "update_unavailable"
+	CodeChecksumMismatch  Code = "checksum_mismatch"
+	CodePackageManaged    Code = "package_managed"
+	CodeDevBuild          Code = "dev_build"
+
 	CodeDraining       Code = "draining"
 	CodeStillListening Code = "still_listening"
 	CodeRestarted      Code = "restarted"
@@ -58,6 +63,8 @@ var exitCodes = map[Code]int{
 	CodeStopBlocked: 5, CodeEngineRejected: 5, CodePlatform: 5,
 
 	CodeConfirmationRequired: 6, CodeCancelled: 6,
+
+	CodeUpdateUnavailable: 1, CodeChecksumMismatch: 1, CodePackageManaged: 5, CodeDevBuild: 5,
 
 	CodeDraining: 7, CodeStillListening: 7, CodeRestarted: 7, CodeTakenOver: 7,
 	CodePending: 7, CodeUnknownOutcome: 7,
