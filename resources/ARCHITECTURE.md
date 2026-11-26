@@ -24,6 +24,7 @@ Know what is running, where it is running from, and how to stop it, without memo
 | `--yes` | Skip the prompt, never the checks |
 | `portly stop <port> --force` | Stop gracefully first; if that fails, ask again and force kill |
 | `portly stop <port> --expect <plan id>` | Stop only if the targets are exactly the ones inspected earlier |
+| `portly update` | Ask, then replace the binary with the latest verified release |
 | `--json` | Machine-readable output on every command above |
 | `--help`, `--version`, `--verbose`, `completion` | Help, version, diagnostics on stderr, shell completion |
 
@@ -60,7 +61,7 @@ MCP server, choosing one of several owners by PID, port ranges, full-screen dash
               +-----------+    --force only           +------------------+
 ```
 
-Portly makes no network calls outside the machine.
+Portly makes no network calls outside the machine, except `portly update`, and only when it is run. That command asks GitHub over HTTPS for the latest release, downloads it, checks it against the release's `checksums.txt`, and replaces the binary. There are no background checks and no telemetry.
 
 ## 3. Structure
 
@@ -68,13 +69,14 @@ Portly makes no network calls outside the machine.
 cmd/portly/            wires modules, sets the exit code
 internal/
   cli/                 commands, table, detail, JSON, prompts
-  app/                 use cases: List, Inspect, Stop
+  app/                 use cases: List, Inspect, Stop, Update
   domain/              types, identity rules, error codes
   modules/
     discovery/         sockets and processes, per OS
     project/           project root, name, evidence, confidence
     docker/            Docker and Podman client
     stopper/           stop policy (pure) and executors (per OS)
+    updater/           finds, verifies and installs releases
   platform/textsafe/   escape stripping, secret masking
 tests/arch/            architecture rules as tests
 tests/e2e/             real listeners, real stops
@@ -97,13 +99,13 @@ resources/             this document, user guide, diagrams
                          |  app  |   the only place modules meet
                          +-------+
                              |
-        +-------------+------+------+-------------+
-        v             v             v             v
-  +-----------+ +-----------+ +-----------+ +-----------+
-  | discovery | |  project  | |  docker   | |  stopper  |
-  +-----------+ +-----------+ +-----------+ +-----------+
-        |             |             |             |
-        +-------------+------+------+-------------+
+        +-------------+------+------+-------------+-------------+
+        v             v             v             v             v
+  +-----------+ +-----------+ +-----------+ +-----------+ +-----------+
+  | discovery | |  project  | |  docker   | |  stopper  | |  updater  |
+  +-----------+ +-----------+ +-----------+ +-----------+ +-----------+
+        |             |             |             |             |
+        +-------------+------+------+-------------+-------------+
                              v
                         +--------+
                         | domain |   also used by app and cli
