@@ -21,8 +21,8 @@ try() {
   echo "ok      $image $(basename "$package")"
 }
 
-try debian:stable-slim '*_amd64.deb' 'apt-get install -y -q' 'dpkg -L' 'apt-get remove -y -q'
-try fedora:latest '*.x86_64.rpm' "dnf install -y -q --disablerepo='*'" 'rpm -ql' "dnf remove -y -q --disablerepo='*'"
-try opensuse/leap:latest '*.x86_64.rpm' 'zypper -n --no-refresh install --allow-unsigned-rpm' 'rpm -ql' 'zypper -n --no-refresh remove'
-try alpine:latest '*_x86_64.apk' 'apk add --allow-untrusted' 'apk info -L' 'apk del'
-try archlinux:latest '*-x86_64.pkg.tar.zst' 'pacman -U --noconfirm' 'pacman -Ql' 'pacman -R --noconfirm'
+try debian:stable-slim '*_linux_amd64.deb' 'apt-get install -y -q' 'dpkg -L' 'apt-get remove -y -q'
+try fedora:latest '*_linux_amd64.rpm' "dnf install -y -q --disablerepo='*'" 'rpm -ql' "dnf remove -y -q --disablerepo='*'"
+try opensuse/leap:latest '*_linux_amd64.rpm' 'zypper -n --no-refresh install --allow-unsigned-rpm' 'rpm -ql' 'zypper -n --no-refresh remove'
+try alpine:latest '*_linux_amd64.apk' 'apk add --allow-untrusted' 'apk info -L' 'apk del'
+try archlinux:latest '*_linux_amd64.pkg.tar.zst' 'pacman -U --noconfirm' 'pacman -Ql' 'pacman -R --noconfirm'

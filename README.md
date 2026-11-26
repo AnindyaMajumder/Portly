@@ -83,15 +83,15 @@ powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumde
 
 ### Linux packages
 
-Download the package for your system from the releases page, then:
+Download the package for your system from the releases page (`amd64`, `arm64`, `386`, `armv6`, `armv7` and more), then:
 
 | System | Install | Remove |
 |---|---|---|
-| Debian, Ubuntu (apt) | `sudo apt install ./portly_0.8.0_amd64.deb` | `sudo apt remove portly` |
-| Fedora, RHEL (dnf) | `sudo dnf install ./portly-0.8.0-1.x86_64.rpm` | `sudo dnf remove portly` |
-| openSUSE (zypper) | `sudo zypper install --allow-unsigned-rpm ./portly-0.8.0-1.x86_64.rpm` | `sudo zypper remove portly` |
-| Alpine (apk) | `sudo apk add --allow-untrusted ./portly_0.8.0_x86_64.apk` | `sudo apk del portly` |
-| Arch (pacman) | `sudo pacman -U ./portly-0.8.0-1-x86_64.pkg.tar.zst` | `sudo pacman -R portly` |
+| Debian, Ubuntu (apt) | `sudo apt install ./portly_0.8.0_linux_amd64.deb` | `sudo apt remove portly` |
+| Fedora, RHEL (dnf) | `sudo dnf install ./portly_0.8.0_linux_amd64.rpm` | `sudo dnf remove portly` |
+| openSUSE (zypper) | `sudo zypper install --allow-unsigned-rpm ./portly_0.8.0_linux_amd64.rpm` | `sudo zypper remove portly` |
+| Alpine (apk) | `sudo apk add --allow-untrusted ./portly_0.8.0_linux_amd64.apk` | `sudo apk del portly` |
+| Arch (pacman) | `sudo pacman -U ./portly_0.8.0_linux_amd64.pkg.tar.zst` | `sudo pacman -R portly` |
 
 Packages include the man page and shell completions. To update, install the newer package the same way. `portly update` leaves package-managed installs to the package manager.
 
