@@ -62,6 +62,8 @@ checksum:
 
 # Install, update and uninstall scripts, at releases/latest/download/<name>
 release:
+  # Every release before 1.0.0 is a pre-release (user decision). Set to auto for 1.0.0.
+  prerelease: true
   extra_files:
     - glob: resources/*.sh
     - glob: resources/*.ps1

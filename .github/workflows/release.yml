@@ -38,7 +38,7 @@ jobs:
         with:
           subject-checksums: dist/checksums.txt
 
-  # The documented install, update and uninstall commands, against the release just published
+  # The documented install and uninstall commands, against the release just published
   installers:
     needs: release
     strategy:
@@ -49,39 +49,39 @@ jobs:
     env:
       GOTOOLCHAIN: local
       TAG: ${{ github.ref_name }}
-      BASE: https://github.com/AnindyaMajumder/Portly/releases/latest/download
+      # Releases before 1.0.0 are pre-releases, which releases/latest skips
+      BASE: https://github.com/AnindyaMajumder/Portly/releases/download/${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Version without the v
+        shell: bash
+        run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       - name: curl | sh, on Windows through Git Bash
         shell: bash
         run: |
           set -eu
           if [ "$RUNNER_OS" = Windows ]; then bin="$(cygpath -u "$LOCALAPPDATA")/Programs/Portly/portly.exe"; else bin="$HOME/.local/bin/portly"; fi
-          curl -fsSL "$BASE/install.sh" | sh
-          test "$("$bin" --version)" = "portly ${TAG#v}"
-          curl -fsSL "$BASE/update.sh" | sh | grep -q "is up to date"
-          out=$bin
-          if [ "$RUNNER_OS" = Windows ]; then out=$(cygpath -w "$bin"); fi
-          go build -ldflags "-X main.version=0.0.1" -o "$out" ./cmd/portly
-          "$bin" update --yes
-          test "$("$bin" --version)" = "portly ${TAG#v}"
+          curl -fsSL "$BASE/install.sh" | PORTLY_VERSION="$VERSION" sh
+          test "$("$bin" --version)" = "portly $VERSION"
+          # update sees only full releases, so before 1.0.0 it must refuse and change nothing
+          if "$bin" update --yes --json > update.json; then exit 1; fi
+          grep -q '"code": "update_unavailable"' update.json
+          test "$("$bin" --version)" = "portly $VERSION"
           curl -fsSL "$BASE/uninstall.sh" | sh
           test ! -e "$bin"
-      - name: PowerShell one-liners
+      - name: Windows PowerShell line from the README
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: |
           $bin = Join-Path $env:LOCALAPPDATA 'Programs\Portly\portly.exe'
-          foreach ($script in 'install', 'update') {
-            powershell -NoProfile -Command "curl.exe -fsSL $env:BASE/$script.ps1 | Out-String | iex"
-            if ($LASTEXITCODE -ne 0) { throw "$script.ps1 failed" }
-            if ((& $bin --version) -ne "portly $($env:TAG.TrimStart('v'))") { throw "wrong version after $script.ps1" }
-          }
-          powershell -NoProfile -Command "curl.exe -fsSL $env:BASE/uninstall.ps1 | Out-String | iex"
-          if ($LASTEXITCODE -ne 0 -or (Test-Path $bin)) { throw 'uninstall.ps1 failed' }
+          $env:PORTLY_VERSION = $env:VERSION; curl.exe -fsSL "$env:BASE/install.ps1" | Out-String | iex
+          if ((& $bin --version) -ne "portly $env:VERSION") { throw 'wrong version after install.ps1' }
+          curl.exe -fsSL "$env:BASE/uninstall.ps1" | Out-String | iex
+          if (Test-Path $bin) { throw 'uninstall.ps1 left portly behind' }
+      - name: Windows cmd line from the README
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          powershell -NoProfile -Command "$env:PORTLY_VERSION='%VERSION%'; curl.exe -fsSL %BASE%/install.ps1 | Out-String | iex" || exit /b 1
+          "%LOCALAPPDATA%\Programs\Portly\portly.exe" --version | findstr /x /c:"portly %VERSION%" || exit /b 1
+          powershell -NoProfile -Command "curl.exe -fsSL %BASE%/uninstall.ps1 | Out-String | iex" || exit /b 1
+          if exist "%LOCALAPPDATA%\Programs\Portly\portly.exe" exit /b 1
