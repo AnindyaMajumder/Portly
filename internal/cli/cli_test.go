@@ -640,3 +640,54 @@ func TestManPageCoversEveryFlag(t *testing.T) {
 		}
 	}
 }
+
+// TestFitPath keeps the start and the last folders of a long path.
+func TestFitPath(t *testing.T) {
+	cases := []struct {
+		path  string
+		width int
+		want  string
+	}{
+		{"~/shop", 12, "~/shop"},
+		{"~/projects/clients/acme/web-app", 18, "~/…/acme/web-app"},
+		{"~/projects/clients/acme/web-app", 12, "~/…/web-app"},
+		{"/srv/apps/very-long-project-name", 14, "…-project-name"},
+		{`~\projects\clients\acme\web-app`, 16, `~\…\acme\web-app`},
+	}
+	for _, c := range cases {
+		if got := fitPath(c.path, c.width); got != c.want || len([]rune(got)) > c.width {
+			t.Errorf("fitPath(%q, %d) = %q, want %q", c.path, c.width, got, c.want)
+		}
+	}
+}
+
+// TestLongDirectoryIsShortened fits a terminal and keeps the full path when piped.
+func TestLongDirectoryIsShortened(t *testing.T) {
+	long := "/home/dev/projects/clients/acme-corporation/backend/services/web-app"
+	report := sampleReport()
+	report.Ports[4].Owners[0].Process.Dir = long
+	terminal := invoke(t, &fakeApp{report: report}, "", func(c *Console) { c.Width, c.Home = 120, "/home/dev" })
+	if !strings.Contains(terminal.out, "~/…/") || !strings.Contains(terminal.out, "web-app") {
+		t.Errorf("not shortened:\n%s", terminal.out)
+	}
+	piped := invoke(t, &fakeApp{report: report}, "", func(c *Console) { c.Home = "/home/dev" })
+	if !strings.Contains(piped.out, "~/projects/clients/acme-corporation/backend/services/web-app") || strings.ContainsAny(piped.out, "│╭─") {
+		t.Errorf("piped output changed:\n%s", piped.out)
+	}
+}
+
+// TestFramedLinesLineUp draws every table line at one width within the terminal.
+func TestFramedLinesLineUp(t *testing.T) {
+	for _, columns := range []int{60, 80, 100, 120, 160} {
+		got := invoke(t, &fakeApp{report: sampleReport()}, "", func(c *Console) { c.Width = columns })
+		var widths []int
+		for line := range strings.Lines(got.out) {
+			if strings.ContainsAny(line, "│╭├╰") {
+				widths = append(widths, len([]rune(strings.TrimRight(line, "\n"))))
+			}
+		}
+		if len(widths) == 0 || slices.Max(widths) != slices.Min(widths) || widths[0] > columns {
+			t.Errorf("%d columns: widths %v\n%s", columns, widths, got.out)
+		}
+	}
+}

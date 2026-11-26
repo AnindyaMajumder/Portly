@@ -22,9 +22,10 @@ const (
 )
 
 const (
-	dash       = "—"
-	columnGap  = 2
-	minProject = 8
+	dash         = "—"
+	columnGap    = 2
+	minProject   = 8
+	minDirectory = 12
 )
 
 // clean makes process-derived text safe to print.
@@ -63,13 +64,14 @@ func (s *session) short(path string) string {
 var columns = []string{"PORT", "PROTO", "PROJECT", "TYPE", "PID", "PROCESS", "ADDRESS", "DIRECTORY"}
 
 const (
-	projectColumn  = 2
-	alwaysColumns  = 5
-	processColumn  = 5
-	unknownProject = "Unknown"
-	deniedOwner    = "Permission denied"
-	addressColumn  = 6
-	maxAddress     = 24
+	projectColumn   = 2
+	alwaysColumns   = 5
+	processColumn   = 5
+	unknownProject  = "Unknown"
+	deniedOwner     = "Permission denied"
+	addressColumn   = 6
+	maxAddress      = 24
+	directoryColumn = 7
 )
 
 // renderList prints one row per owner.
@@ -179,10 +181,45 @@ func (s *session) renderTable(rows [][]string) {
 		widths[addressColumn] = min(widths[addressColumn], maxAddress)
 	}
 	shown := s.fit(widths)
+	isFramed := s.frame().left != ""
+	if isFramed {
+		s.println(s.rule("╭", "┬", "╮", widths[:shown]))
+	}
 	s.println(s.paint(faint, s.line(columns, widths, shown)))
+	if isFramed {
+		s.println(s.rule("├", "┼", "┤", widths[:shown]))
+	}
 	for _, cells := range rows {
 		s.println(s.colorRow(cells, widths, shown))
 	}
+	if isFramed {
+		s.println(s.rule("╰", "┴", "╯", widths[:shown]))
+	}
+}
+
+// frame is the border around a table on a terminal. Piped output has none.
+type frame struct{ left, gap, right string }
+
+// frame picks the border for this console.
+func (s *session) frame() frame {
+	if s.console.Width == 0 {
+		return frame{gap: strings.Repeat(" ", columnGap)}
+	}
+	return frame{left: "│ ", gap: " │ ", right: " │"}
+}
+
+// width is how many cells the border takes around some columns.
+func (f frame) width(shown int) int {
+	return lipgloss.Width(f.left) + lipgloss.Width(f.right) + lipgloss.Width(f.gap)*(shown-1)
+}
+
+// rule draws a horizontal border line with its corners and joints.
+func (s *session) rule(left, joint, right string, widths []int) string {
+	var parts []string
+	for _, width := range widths {
+		parts = append(parts, strings.Repeat("─", width+2))
+	}
+	return s.paint(faint, left+strings.Join(parts, joint)+right)
 }
 
 // fit returns how many columns show, and narrows the project as a last resort.
@@ -191,7 +228,7 @@ func (s *session) fit(widths []int) int {
 		return len(widths)
 	}
 	total := func(shown int) int {
-		sum := columnGap * (shown - 1)
+		sum := s.frame().width(shown)
 		for _, width := range widths[:shown] {
 			sum += width
 		}
@@ -201,19 +238,28 @@ func (s *session) fit(widths []int) int {
 	for shown > alwaysColumns && total(shown) > s.console.Width {
 		shown--
 	}
+	// A long directory takes the room left instead of disappearing
+	if room := s.console.Width - total(directoryColumn+1) + widths[directoryColumn]; shown == directoryColumn && room >= minDirectory {
+		widths[directoryColumn], shown = room, directoryColumn+1
+	}
 	if excess := total(shown) - s.console.Width; excess > 0 {
 		widths[projectColumn] = max(min(minProject, widths[projectColumn]), widths[projectColumn]-excess)
 	}
 	return shown
 }
 
-// line joins padded cells.
+// line joins padded cells inside the border.
 func (s *session) line(cells []string, widths []int, shown int) string {
 	var padded []string
 	for i, cell := range cells[:shown] {
-		padded = append(padded, pad(cell, widths[i]))
+		padded = append(padded, fitCell(i, cell, widths[i]))
 	}
-	return strings.TrimRight(strings.Join(padded, strings.Repeat(" ", columnGap)), " ")
+	f := s.frame()
+	text := f.left + strings.Join(padded, f.gap) + f.right
+	if f.left == "" {
+		return strings.TrimRight(text, " ")
+	}
+	return text
 }
 
 // colorRow highlights the port and dims what could not be read.
@@ -223,7 +269,7 @@ func (s *session) colorRow(cells []string, widths []int, shown int) string {
 	}
 	var padded []string
 	for i, cell := range cells[:shown] {
-		text := pad(cell, widths[i])
+		text := fitCell(i, cell, widths[i])
 		switch {
 		case i == 0:
 			text = s.paint(blue, text)
@@ -234,7 +280,40 @@ func (s *session) colorRow(cells []string, widths []int, shown int) string {
 		}
 		padded = append(padded, text)
 	}
-	return strings.Join(padded, strings.Repeat(" ", columnGap))
+	f := s.frame()
+	return s.paint(faint, f.left) + strings.Join(padded, s.paint(faint, f.gap)) + s.paint(faint, f.right)
+}
+
+// fitCell pads a cell, shortening directories in the middle instead of the end.
+func fitCell(column int, cell string, width int) string {
+	if column == directoryColumn {
+		cell = fitPath(cell, width)
+	}
+	return pad(cell, width)
+}
+
+// fitPath keeps a path's start and as many trailing folders as fit, like ~/…/acme/web.
+func fitPath(path string, width int) string {
+	if lipgloss.Width(path) <= width {
+		return path
+	}
+	separator := "/"
+	if strings.Contains(path, `\`) && !strings.Contains(path, "/") {
+		separator = `\`
+	}
+	parts := strings.Split(path, separator)
+	head, tail := parts[0]+separator+"…", ""
+	for i := len(parts) - 1; i > 0 && lipgloss.Width(head+separator+parts[i]+tail) <= width; i-- {
+		tail = separator + parts[i] + tail
+	}
+	if tail != "" {
+		return head + tail
+	}
+	last := []rune(parts[len(parts)-1])
+	for len(last) > 0 && lipgloss.Width("…"+string(last)) > width {
+		last = last[1:]
+	}
+	return "…" + string(last)
 }
 
 // pad fills or cuts a cell to a display width.
