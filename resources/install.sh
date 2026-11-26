@@ -2,17 +2,26 @@
 # Install Portly for the current user. Verifies the checksum, never uses sudo.
 set -eu
 repository=https://github.com/AnindyaMajumder/Portly
-directory=${PORTLY_INSTALL_DIR:-$HOME/.local/bin}
 
 fail() { echo "install: $1" >&2; exit 1; }
 command -v curl >/dev/null || fail "curl is required"
-command -v tar >/dev/null || fail "tar is required"
 
+# Git Bash, MSYS2 and Cygwin on Windows get the zip and the same folder as install.ps1
 case $(uname -s) in
   Linux) os=linux ;;
   Darwin) os=darwin ;;
+  MINGW* | MSYS* | CYGWIN*) os=windows ;;
   *) fail "unsupported system $(uname -s)" ;;
 esac
+if [ "$os" = windows ]; then
+  directory=${PORTLY_INSTALL_DIR:-$(cygpath -u "$LOCALAPPDATA")/Programs/Portly}
+  binary=portly.exe extension=zip
+  command -v unzip >/dev/null || fail "unzip is required"
+else
+  directory=${PORTLY_INSTALL_DIR:-$HOME/.local/bin}
+  binary=portly extension=tar.gz
+  command -v tar >/dev/null || fail "tar is required"
+fi
 case $(uname -m) in
   x86_64 | amd64) arch=amd64 ;;
   aarch64 | arm64) arch=arm64 ;;
@@ -34,7 +43,7 @@ esac
 
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
-archive="portly_${version}_${os}_${arch}.tar.gz"
+archive="portly_${version}_${os}_${arch}.${extension}"
 for file in "$archive" checksums.txt; do
   curl -fsSL --proto '=https' -o "$temporary/$file" "$repository/releases/download/v$version/$file" || fail "could not download $file"
 done
@@ -47,9 +56,13 @@ else
 fi
 [ -n "$expected" ] && [ "$expected" = "$actual" ] || fail "checksum does not match, nothing was installed"
 
-tar -xzf "$temporary/$archive" -C "$temporary" portly
+if [ "$extension" = zip ]; then
+  unzip -q -o "$temporary/$archive" "$binary" -d "$temporary"
+else
+  tar -xzf "$temporary/$archive" -C "$temporary" "$binary"
+fi
 mkdir -p "$directory"
-mv "$temporary/portly" "$directory/portly"
+mv "$temporary/$binary" "$directory/$binary"
 echo "Installed portly $version in $directory"
 case ":$PATH:" in
   *":$directory:"*) ;;
