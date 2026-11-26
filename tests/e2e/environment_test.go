@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +43,13 @@ func runInside(t *testing.T, kind, pattern string, flags ...string) {
 		"--label", "com.docker.compose.project=portly-test", "-v", dir + ":/portly:ro",
 		"-e", binVariable + "=/portly", "-e", insideVariable + "=" + kind,
 	}
-	arguments = append(append(arguments, flags...), image, "timeout", "150", "/portly/e2e.test", "-test.v", "-test.timeout=140s", "-test.run="+pattern)
+	// Long runs get the time left before the test's own deadline
+	seconds := 150
+	if deadline, ok := t.Deadline(); ok {
+		seconds = max(seconds, int(time.Until(deadline).Seconds())-10)
+	}
+	limit, testLimit := strconv.Itoa(seconds), strconv.Itoa(seconds-10)+"s"
+	arguments = append(append(arguments, flags...), image, "timeout", limit, "/portly/e2e.test", "-test.v", "-test.timeout="+testLimit, "-test.run="+pattern)
 	output, err := exec.Command("docker", arguments...).CombinedOutput()
 	t.Log("\n" + string(output))
 	if err != nil || !strings.Contains(string(output), "--- PASS: TestInside") {
@@ -68,6 +75,15 @@ func TestDockerInsideWithoutPidfd(t *testing.T) {
 func TestDockerInsideAsRoot(t *testing.T) {
 	runInside(t, "root", "TestInside")
 	runInside(t, "root-terminal", "TestInside|TestGracefulStop$|TestForceKills", "--tty")
+}
+
+// TestDockerInsideCycles repeats stops in a throwaway container when PORTLY_STOP_CYCLES is set.
+func TestDockerInsideCycles(t *testing.T) {
+	cycles := os.Getenv("PORTLY_STOP_CYCLES")
+	if cycles == "" {
+		t.Skip("set PORTLY_STOP_CYCLES, or run make cycles")
+	}
+	runInside(t, "user", "TestInside|TestRepeatedStops$", "--user=1000:1000", "-e", "PORTLY_STOP_CYCLES="+cycles)
 }
 
 // TestDockerOtherNetwork never mixes up equal port numbers.

@@ -48,8 +48,8 @@ distro-test: build ## Static binary in local distribution images, never pulls
 perf: ## Time, memory and size budgets
 	PORTLY_PERF_TESTS=1 go test -count=1 -run TestBudget -v ./tests/e2e
 
-cycles: ## Repeated stops, CYCLES=100 takes about 3 minutes
-	PORTLY_STOP_CYCLES=$(or $(CYCLES),100) go test -count=1 -timeout 40m -run TestRepeatedStops ./tests/e2e
+cycles: ## 1,000 repeated stops in a throwaway container, about 30 minutes (CYCLES=n to change)
+	PORTLY_DOCKER_TESTS=1 PORTLY_STOP_CYCLES=$(or $(CYCLES),1000) go test -count=1 -timeout 60m -run TestDockerInsideCycles -v ./tests/e2e
 
 cover: ## Coverage gate
 	./tests/coverage.sh
