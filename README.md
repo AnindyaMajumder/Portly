@@ -20,65 +20,70 @@ In a terminal the table has borders, and columns that don't fit are dropped from
 | `portly stop 8000` | Show exactly what would stop, ask, stop it gracefully |
 | `portly stop 5353/udp` | Stop a UDP owner. A bare port means TCP |
 | `portly stop 8000 --yes` | Do not ask. Every check still runs |
-| `portly stop 8000 --force` | Graceful first. If that fails, ask again and kill |
-| `portly update` | Update to the latest release, after asking |
+| `portly stop 8000 --force` | Graceful first when possible. Asks again before any kill |
+| `portly update` | Update to the latest release, after asking (from 1.0.0, see Update below) |
 | `--json` | One JSON document, for scripts and agents |
 
 ## Status
 
 Listing and lookup work on Linux. macOS and Windows are built and unit tested, and not yet confirmed on real machines.
 
-**Stopping is switched off in this version on every platform.** Each platform has an evidence gate, a set of tests against real servers, and stopping is enabled only after its gate has passed there. Until then `portly stop` explains that and stops nothing.
+**Stopping works on Linux (amd64 and arm64), for processes and Docker containers.** It is still switched off on macOS and Windows. Each platform has an evidence gate, a set of tests against real servers (gunicorn, uvicorn, Django, Flask, Node), and stopping is enabled only after its gate has passed there. Until then `portly stop` explains that and stops nothing. Podman containers are listed, never stopped. Version 0.8.0 had every gate closed.
 
 ## Install
 
-Every release is on the [releases page](https://github.com/AnindyaMajumder/Portly/releases), with checksums signed by Sigstore.
+Every release is on the [releases page](https://github.com/AnindyaMajumder/Portly/releases), with checksums signed by Sigstore. Until 1.0.0 every release is a pre-release, so the commands below name the version.
 
 **macOS, Linux, and Windows in Git Bash or WSL**
 
 ```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.sh | PORTLY_VERSION=0.8.2 sh
 ```
 
-**Windows PowerShell or cmd**
+**Windows PowerShell**
 
 ```
-powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/install.ps1 | Out-String | iex"
+$env:PORTLY_VERSION='0.8.2'; curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.ps1 | Out-String | iex
 ```
 
-Both install for the current user, without administrator rights, and verify the checksum. They put `portly` in `~/.local/bin`, or `portly.exe` in `%LOCALAPPDATA%\Programs\Portly`, and print the command to add that folder to your `PATH` if needed. In WSL you get the Linux build, which sees the ports of the WSL machine, not of Windows.
-
-Variables go after the pipe, so `sh` sees them:
+**Windows cmd**
 
 ```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/install.sh | PORTLY_INSTALL_DIR=/opt/bin PORTLY_VERSION=0.8.0 sh
+powershell -NoProfile -Command "$env:PORTLY_VERSION='0.8.2'; curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.ps1 | Out-String | iex"
+```
+
+All three install for the current user, without administrator rights, and verify the checksum. They put `portly` in `~/.local/bin`, or `portly.exe` in `%LOCALAPPDATA%\Programs\Portly`, and print the command to add that folder to your `PATH` if needed. In WSL you get the Linux build, which sees the ports of the WSL machine, not of Windows.
+
+Variables go after the pipe, so `sh` sees them. To choose the folder:
+
+```
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.sh | PORTLY_VERSION=0.8.2 PORTLY_INSTALL_DIR=/opt/bin sh
 ```
 
 ### Update
 
-```
-portly update
-```
+Until 1.0.0, update by running the install command of the newer version from the [releases page](https://github.com/AnindyaMajumder/Portly/releases). It replaces the old binary.
 
-It asks first, never downgrades, and changes nothing if the download does not match its checksum. `portly update --json` only checks. The same through the scripts:
-
-```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/update.sh | sh
-powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/update.ps1 | Out-String | iex"
-```
+`portly update` only sees releases that are not pre-releases, so it starts working with 1.0.0. Until then it answers "No release has been published yet" and changes nothing.
 
 ### Uninstall
 
 macOS, Linux, Git Bash:
 
 ```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.sh | sh
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/uninstall.sh | sh
 ```
 
-Windows PowerShell or cmd:
+Windows PowerShell:
 
 ```
-powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.ps1 | Out-String | iex"
+curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/uninstall.ps1 | Out-String | iex
+```
+
+Windows cmd:
+
+```
+powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/uninstall.ps1 | Out-String | iex"
 ```
 
 ### Linux packages
@@ -87,13 +92,13 @@ Download the package for your system from the releases page (`amd64`, `arm64`, `
 
 | System | Install | Remove |
 |---|---|---|
-| Debian, Ubuntu (apt) | `sudo apt install ./portly_0.8.0_linux_amd64.deb` | `sudo apt remove portly` |
-| Fedora, RHEL (dnf) | `sudo dnf install ./portly_0.8.0_linux_amd64.rpm` | `sudo dnf remove portly` |
-| openSUSE (zypper) | `sudo zypper install --allow-unsigned-rpm ./portly_0.8.0_linux_amd64.rpm` | `sudo zypper remove portly` |
-| Alpine (apk) | `sudo apk add --allow-untrusted ./portly_0.8.0_linux_amd64.apk` | `sudo apk del portly` |
-| Arch (pacman) | `sudo pacman -U ./portly_0.8.0_linux_amd64.pkg.tar.zst` | `sudo pacman -R portly` |
+| Debian, Ubuntu (apt) | `sudo apt install ./portly_0.8.2_linux_amd64.deb` | `sudo apt remove portly` |
+| Fedora, RHEL (dnf) | `sudo dnf install ./portly_0.8.2_linux_amd64.rpm` | `sudo dnf remove portly` |
+| openSUSE (zypper) | `sudo zypper install --allow-unsigned-rpm ./portly_0.8.2_linux_amd64.rpm` | `sudo zypper remove portly` |
+| Alpine (apk) | `sudo apk add --allow-untrusted ./portly_0.8.2_linux_amd64.apk` | `sudo apk del portly` |
+| Arch (pacman) | `sudo pacman -U ./portly_0.8.2_linux_amd64.pkg.tar.zst` | `sudo pacman -R portly` |
 
-Packages include the man page and shell completions. To update, install the newer package the same way. `portly update` leaves package-managed installs to the package manager.
+Packages include the man page and shell completions. To update, install the newer package the same way.
 
 ### Archives
 
@@ -105,7 +110,7 @@ With Go 1.27.4 or later: `make build`, then `bin/portly`.
 
 ## Safety
 
-Portly refuses rather than guesses. It never stops a port with several owners, a system or supervised process, a port forwarder, or a container it can't prove is local. It never runs sudo and never reads other processes' environment variables. Secrets in command lines are masked, best effort. A kill happens only with `--force`, after a graceful stop was delivered and failed.
+Portly refuses rather than guesses. It never stops a port with several owners, a system or supervised process, a port forwarder, or a container it can't prove is local. It never runs sudo and never reads other processes' environment variables. Secrets in command lines are masked, best effort. A kill happens only with `--force`, after a graceful stop was delivered and failed or when none exists, and only after you type `kill` (or pass `--yes`). Containers restarted by systemd, Nomad, ECS, Swarm or Kubernetes are refused.
 
 ## For scripts and agents
 

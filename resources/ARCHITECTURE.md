@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented. Every evidence gate is still closed, so stopping is refused on every platform. |
+| Status | Implemented. The Linux evidence gate is open. macOS and Windows gates are closed, so stopping is refused there. |
 | Language | Go 1.27.4, no cgo |
 | Style | Modular monolith, one static binary |
 
@@ -379,7 +379,7 @@ If an engine publishes a port, Portly never falls back to signalling a native pr
 | Container whose stop signal is not known to be graceful | Refused without `--force` |
 | Being debugged, or suspended while SIGTERM is ignored or blocked | Refused: unsupported |
 | Native Windows process | Refused without `--force`: no graceful method |
-| A platform whose evidence gate has not passed (section 16) | Refused: unsupported |
+| A platform whose evidence gate has not passed (section 16) | Refused: `platform_unverified` |
 
 The policy is a pure function: snapshot in, stop plan out. It reads no clock and no OS state, so every rule can be tested directly.
 
@@ -565,10 +565,10 @@ Go no longer supports 32-bit macOS or 32-bit ARM Windows. Binaries are static, s
 | Capability | Linux | macOS | Windows |
 |---|---|---|---|
 | List and inspect | Full | Full | Full, connected UDP not distinguishable |
-| Graceful stop, single owner | Yes | Yes, after its gate | No |
+| Graceful stop, single owner | Yes, amd64 and arm64 | Yes, after its gate | No |
 | Graceful stop, family | Verified families | No | No |
-| Force kill | Yes | Yes, after its gate | Yes, after its gate |
-| Docker containers | Yes | Yes | Yes |
+| Force kill | Yes, amd64 and arm64 | Yes, after its gate | Yes, after its gate |
+| Docker containers | Yes, amd64 and arm64 | After its gate | After its gate |
 | Podman containers | List only | List only | List only |
 
 ## 14. Quality
@@ -624,7 +624,7 @@ Required scenarios:
 
 ## 16. Evidence gates and resolved points
 
-Stopping is enabled on a platform only after its gate passes there. Until then stop is refused with `unsupported`, and listing still works.
+Stopping is enabled on a platform only after its gate passes there. Until then stop is refused with `platform_unverified`, and listing still works. Linux on amd64 and arm64 has passed; other Linux processors only ran under emulation and stay closed.
 
 | Gate | Must prove |
 |---|---|

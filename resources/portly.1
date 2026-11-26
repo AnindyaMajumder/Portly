@@ -34,7 +34,7 @@ shows exactly what would stop, asks, stops it gracefully and checks that the por
 A bare port means TCP. Use
 .IB port /udp
 to stop a UDP owner.
-Stopping is enabled only on platforms whose tests have passed. Elsewhere it is refused.
+Stopping is enabled only on platforms whose tests have passed: Linux on amd64 and arm64. Elsewhere it is refused.
 .PP
 .B update
 checks GitHub for a newer release, asks, then downloads it, verifies its checksum and replaces the binary.
@@ -59,7 +59,7 @@ it only checks.
 Do not ask. Every check still runs.
 .TP
 .B \-\-force
-If a graceful stop was delivered and failed, ask for the word kill, then kill. Unsaved data can be lost.
+If a graceful stop was delivered and failed, or none exists, ask for the word kill, then kill. Unsaved data can be lost.
 .TP
 .BI \-\-expect " plan-id"
 Stop only if the targets are the ones inspected earlier.

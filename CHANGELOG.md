@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 (2026-11-27)
+
+- Stopping works on Linux (amd64 and arm64), for processes and Docker containers. Its evidence gate passed with real gunicorn, uvicorn, Django, Flask and Node servers. macOS, Windows and other Linux processors still refuse.
+- `--force` asks for `kill` again also when a target has no graceful stop.
+- Containers that a systemd service, Nomad or ECS would start again are refused.
+- `--expect` and the last check before the signal also cover containers sharing the target's network and new child processes.
+- Every release before 1.0.0 is published as a pre-release. Install it by its tag; `portly update` works from 1.0.0.
+
 ## 0.8.0 (2026-11-27)
 
 First public release.
