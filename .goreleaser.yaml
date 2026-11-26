@@ -58,6 +58,12 @@ nfpms:
 checksum:
   name_template: checksums.txt
 
+# Install, update and uninstall scripts, at releases/latest/download/<name>
+release:
+  extra_files:
+    - glob: resources/*.sh
+    - glob: resources/*.ps1
+
 sboms:
   - artifacts: archive
 

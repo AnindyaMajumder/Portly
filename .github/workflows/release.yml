@@ -37,3 +37,51 @@ jobs:
       - uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           subject-checksums: dist/checksums.txt
+
+  # The documented install, update and uninstall commands, against the release just published
+  installers:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    env:
+      GOTOOLCHAIN: local
+      TAG: ${{ github.ref_name }}
+      BASE: https://github.com/AnindyaMajumder/Portly/releases/latest/download
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: curl | sh, on Windows through Git Bash
+        shell: bash
+        run: |
+          set -eu
+          if [ "$RUNNER_OS" = Windows ]; then bin="$(cygpath -u "$LOCALAPPDATA")/Programs/Portly/portly.exe"; else bin="$HOME/.local/bin/portly"; fi
+          curl -fsSL "$BASE/install.sh" | sh
+          test "$("$bin" --version)" = "portly ${TAG#v}"
+          curl -fsSL "$BASE/update.sh" | sh | grep -q "is up to date"
+          out=$bin
+          if [ "$RUNNER_OS" = Windows ]; then out=$(cygpath -w "$bin"); fi
+          go build -ldflags "-X main.version=0.0.1" -o "$out" ./cmd/portly
+          "$bin" update --yes
+          test "$("$bin" --version)" = "portly ${TAG#v}"
+          curl -fsSL "$BASE/uninstall.sh" | sh
+          test ! -e "$bin"
+      - name: PowerShell one-liners
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = Join-Path $env:LOCALAPPDATA 'Programs\Portly\portly.exe'
+          foreach ($script in 'install', 'update') {
+            powershell -NoProfile -Command "curl.exe -fsSL $env:BASE/$script.ps1 | Out-String | iex"
+            if ($LASTEXITCODE -ne 0) { throw "$script.ps1 failed" }
+            if ((& $bin --version) -ne "portly $($env:TAG.TrimStart('v'))") { throw "wrong version after $script.ps1" }
+          }
+          powershell -NoProfile -Command "curl.exe -fsSL $env:BASE/uninstall.ps1 | Out-String | iex"
+          if ($LASTEXITCODE -ne 0 -or (Test-Path $bin)) { throw 'uninstall.ps1 failed' }
