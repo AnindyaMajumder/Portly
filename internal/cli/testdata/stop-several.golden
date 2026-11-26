@@ -12,6 +12,7 @@ stderr:
   ! shop-db-1 (shop / db): containers sharing its network: sidecar
   ! shop-db-1 (shop / db): paused, will be resumed to stop
   ! shop-db-1 (shop / db): will be removed when it stops (--rm)
+Warning: stopping can't be undone. Unsaved work in it can be lost.
 Stop 2 of 3? [y/N] shop-db-1 (shop / db) was asked to stop and is still running, the request stays pending at the engine.
   To kill it: portly stop 5432 --force
 Can't stop port 22: it belongs to another user (root).

@@ -36,6 +36,7 @@ func (s *session) stop(ctx context.Context, args []string) error {
 	if len(plan.Targets) > 0 {
 		if !s.options.json {
 			s.showPlan(plan)
+			fmt.Fprintln(s.console.Err, s.paintErr(yellow, irreversible))
 		}
 		if !s.options.yes && !s.ask(ctx, question(plan)) {
 			return domain.NewError(domain.CodeCancelled, "Cancelled", "Nothing was stopped")
@@ -44,6 +45,9 @@ func (s *session) stop(ctx context.Context, args []string) error {
 	}
 	return s.reportStop(plan, outcomes)
 }
+
+// Shown before every stop, also with --yes
+const irreversible = "Warning: stopping can't be undone. Unsaved work in it can be lost."
 
 // reportUnconfirmed shows the plan and stops nothing.
 func (s *session) reportUnconfirmed(plan app.Plan) error {
@@ -230,7 +234,11 @@ func (s *session) confirmForce(plan app.Plan) app.Confirm {
 		}
 		for i := range plan.Stop.Targets {
 			if plan.Stop.Targets[i].Root == stop.Root && plan.Stop.Targets[i].Container == stop.Container {
-				fmt.Fprintf(s.console.Err, "%s did not stop.\n", targetName(plan.Targets[i]))
+				if stop.GracefulAvailable {
+					fmt.Fprintf(s.console.Err, "%s did not stop.\n", targetName(plan.Targets[i]))
+				} else {
+					fmt.Fprintf(s.console.Err, "%s has no graceful way to stop.\n", targetName(plan.Targets[i]))
+				}
 				s.showTarget(plan.Targets[i])
 			}
 		}

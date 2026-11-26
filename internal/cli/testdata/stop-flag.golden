@@ -9,3 +9,4 @@ Directory  ~/shop
   ! child processes: uvicorn (PID 6182)
   ! suspended, will be resumed to stop
   ! runs under a reloader, which may start it again
+Warning: stopping can't be undone. Unsaved work in it can be lost.
