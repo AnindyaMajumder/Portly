@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -240,10 +241,15 @@ func TestReread(t *testing.T) {
 // childVariable turns the test binary into a listener that ends by itself.
 const childVariable = "PORTLY_DISCOVERY_CHILD"
 
-// TestMain runs the tests, or listens until told to close.
+// TestMain runs the tests and checks for leaked goroutines, or listens until told to close.
 func TestMain(m *testing.M) {
 	if os.Getenv(childVariable) == "" {
-		os.Exit(m.Run())
+		code := m.Run()
+		if leaked := leakedGoroutines(); code == 0 && leaked != "" {
+			fmt.Fprintln(os.Stderr, "leaked goroutines:\n"+leaked)
+			code = 1
+		}
+		os.Exit(code)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -326,5 +332,24 @@ func TestLargeScanStaysFast(t *testing.T) {
 	snapshot := scanFake(t, fake)
 	if elapsed := time.Since(started); elapsed > 3*time.Second || len(snapshot.Processes) != 5002 {
 		t.Errorf("%d processes in %v", len(snapshot.Processes), elapsed)
+	}
+}
+
+// leakedGoroutines waits up to 2 s for Portly goroutines other than this one to end.
+func leakedGoroutines() string {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		buffer := make([]byte, 1<<20)
+		stacks := strings.Split(string(buffer[:runtime.Stack(buffer, true)]), "\n\n")
+		var leaked []string
+		for _, stack := range stacks[1:] {
+			if strings.Contains(stack, "Portly/internal/") {
+				leaked = append(leaked, stack)
+			}
+		}
+		if len(leaked) == 0 || time.Now().After(deadline) {
+			return strings.Join(leaked, "\n\n")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
