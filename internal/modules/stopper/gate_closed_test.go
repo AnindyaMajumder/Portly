@@ -1,4 +1,4 @@
-//go:build !portly_evidence
+//go:build !portly_evidence && !(linux && (amd64 || arm64))
 
 package stopper
 

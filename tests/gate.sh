@@ -61,7 +61,7 @@ case ${1:-} in
     export PORTLY_DOCKER_TESTS=1
     sudo sh -c 'f=/etc/docker/daemon.json; [ -s $f ] || echo "{}" > $f; jq ".\"userland-proxy\"=false" $f > $f.new && mv $f.new $f && systemctl restart docker'
     collect
-    run scope $(tests '^TestDocker(Lookup|ReleaseRefuses|Guard|GracefulStop|IgnoredStopIsPending|Force|KillStopSignal)$')
+    run scope $(tests '^TestDocker(Lookup|ReleaseStops|Guard|GracefulStop|IgnoredStopIsPending|Force|KillStopSignal)$')
     ;;
   podman)
     export PORTLY_PODMAN_TESTS=1 XDG_RUNTIME_DIR="/run/user/$(id -u)"

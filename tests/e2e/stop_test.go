@@ -15,14 +15,23 @@ import (
 	"time"
 )
 
-// TestReleaseBuildRefusesEveryStop is the closed evidence gate.
-func TestReleaseBuildRefusesEveryStop(t *testing.T) {
+// TestReleaseBuildStops is the open Linux gate: the build users get stops a server this test started.
+func TestReleaseBuildStops(t *testing.T) {
 	s := start(t, "tcp")
-	for _, args := range [][]string{{"stop", s.ports[0], "--yes", "--json"}, {"stop", s.ports[0], "--yes", "--force", "--json"}} {
-		got := portly(t, release, args...)
-		if got.exit != 5 || got.json.Results[0].Error.Code != "platform_unverified" || !s.alive() || isFree(s.ports[0]) {
-			t.Errorf("exit %d, alive %v\n%s", got.exit, s.alive(), got.stdout)
-		}
+	got := portly(t, release, "stop", s.ports[0], "--yes", "--json")
+	got.expect(t, 0, "stopped")
+	if s.alive() || !isFree(s.ports[0]) {
+		t.Errorf("alive %v\n%s", s.alive(), got.stdout)
+	}
+}
+
+// TestReleaseBuildStillRefuses keeps every safety rule without the test guard.
+func TestReleaseBuildStillRefuses(t *testing.T) {
+	first := start(t, "share")
+	second := start(t, "share", "PORTLY_E2E_PORT="+first.ports[0])
+	got := portly(t, release, "stop", first.ports[0], "--yes", "--force", "--json")
+	if got.exit != 5 || got.json.Results[0].Error.Code != "ambiguous_owner" || !first.alive() || !second.alive() {
+		t.Errorf("exit %d\n%s", got.exit, got.stdout)
 	}
 }
 

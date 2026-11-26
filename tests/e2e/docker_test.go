@@ -77,12 +77,13 @@ func TestDockerLookup(t *testing.T) {
 	}
 }
 
-// TestDockerReleaseRefuses is the closed gate.
-func TestDockerReleaseRefuses(t *testing.T) {
+// TestDockerReleaseStops is the open Linux gate for a container this test started.
+func TestDockerReleaseStops(t *testing.T) {
 	c := runContainer(t, "portly-test", obedient)
-	got := portly(t, release, "stop", c.port, "--yes", "--force", "--json")
-	if got.exit != 5 || got.json.Results[0].Error.Code != "platform_unverified" || !c.running() {
-		t.Errorf("exit %d, running %v\n%s", got.exit, c.running(), got.stdout)
+	got := portly(t, release, "stop", c.port, "--yes", "--json")
+	got.expect(t, 0, "stopped")
+	if c.running() {
+		t.Errorf("still running\n%s", got.stdout)
 	}
 }
 
