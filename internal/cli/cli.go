@@ -208,7 +208,7 @@ func (s *session) stopCommand() *cobra.Command {
 		command.Long += "\n\n" + stopDisabled + "."
 	}
 	command.Flags().BoolVarP(&s.options.yes, "yes", "y", false, "do not ask, every check still runs")
-	command.Flags().BoolVar(&s.options.force, "force", false, "kill if a graceful stop fails, after asking again")
+	command.Flags().BoolVar(&s.options.force, "force", false, "kill if a graceful stop fails or none exists, after asking again")
 	command.Flags().StringVar(&s.options.expect, "expect", "", "stop only if the targets match this plan_id")
 	return command
 }

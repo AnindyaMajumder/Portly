@@ -13,7 +13,7 @@ Examples:
 
 Flags:
       --expect string   stop only if the targets match this plan_id
-      --force           kill if a graceful stop fails, after asking again
+      --force           kill if a graceful stop fails or none exists, after asking again
   -h, --help            help for stop
   -y, --yes             do not ask, every check still runs
 

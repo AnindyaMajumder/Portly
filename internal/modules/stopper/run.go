@@ -64,6 +64,10 @@ func (s *Stopper) Run(ctx context.Context, request domain.StopRequest, planned d
 		if !request.Force {
 			return refused(domain.Refusal{Code: domain.CodeNoGraceful})
 		}
+		// No graceful stop exists, so the kill still needs its own second confirmation
+		if confirm == nil || !confirm(ctx, planned) {
+			return refused(domain.Refusal{Code: domain.CodeCancelled})
+		}
 		return s.try(ctx, request, planned, domain.Forced)
 	}
 	outcome := s.try(ctx, request, planned, domain.Graceful)

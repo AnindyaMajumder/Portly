@@ -185,6 +185,7 @@ func TestFirstForceStopChecksReach(t *testing.T) {
 		},
 	} {
 		l := containerLab()
+		l.answer = true
 		editContainer(&l.world.snapshot, func(c *domain.Container) { c.StopSignal = "SIGKILL" })
 		outcome := l.stop(t, true, func(w *fakeWorld) { editContainer(&w.snapshot, edit) }, web)
 		if outcome.Code != domain.CodeChanged || l.engine.kills != 0 {

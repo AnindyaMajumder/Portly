@@ -571,15 +571,23 @@ func TestForcedKillNeedsAPlannedSocket(t *testing.T) {
 	}
 }
 
-// TestNoGracefulMethodNeedsForce is the native Windows path.
+// TestNoGracefulMethodNeedsForce kills only with --force and a second confirmation.
 func TestNoGracefulMethodNeedsForce(t *testing.T) {
+	for _, answer := range []bool{true, false} {
+		l := newLab(world())
+		l.stopper.gates = gates{native: true}
+		l.answer = answer
+		outcome := l.stop(t, true, nil, web)
+		wantKilled, wantCode := 1, domain.Code("")
+		if !answer {
+			wantKilled, wantCode = 0, domain.CodeCancelled
+		}
+		if outcome.Code != wantCode || l.asked != 1 || len(l.terminated) != 0 || len(l.killed) != wantKilled {
+			t.Errorf("answer %v: %+v, asked %d, %v %v", answer, outcome, l.asked, l.terminated, l.killed)
+		}
+	}
 	l := newLab(world())
 	l.stopper.gates = gates{native: true}
-	l.answer = true
-	outcome := l.stop(t, true, nil, web)
-	if outcome.Code != "" || outcome.Method != domain.Forced || l.asked != 0 || len(l.terminated) != 0 || len(l.killed) != 1 {
-		t.Errorf("%+v, asked %d, %v %v", outcome, l.asked, l.terminated, l.killed)
-	}
 	target := domain.StopTarget{Kind: domain.KindProcess}
 	if got := l.stopper.Run(t.Context(), domain.StopRequest{}, target, nil); got.Code != domain.CodeNoGraceful {
 		t.Errorf("without force: %+v", got)
