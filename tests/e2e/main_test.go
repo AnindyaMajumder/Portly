@@ -276,6 +276,8 @@ func serve(mode string) {
 		fmt.Println(port)
 	case "share":
 		announce(reuse("127.0.0.1:" + os.Getenv("PORTLY_E2E_PORT")))
+	case "udp-share":
+		fmt.Println(shareUDP("0.0.0.0:" + os.Getenv("PORTLY_E2E_PORT")))
 	case "family", "stubborn-family":
 		serveFamily(mode == "stubborn-family")
 	case "worker":
@@ -311,6 +313,20 @@ func reuse(address string) net.Listener {
 	listener, err := config.Listen(context.Background(), "tcp", address)
 	check(err)
 	return listener
+}
+
+// shareUDP binds a UDP port the way mDNS responders share 5353, and returns it.
+func shareUDP(address string) string {
+	config := net.ListenConfig{Control: func(_, _ string, conn syscall.RawConn) error {
+		return conn.Control(func(fd uintptr) {
+			check(unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1))
+			check(unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1))
+		})
+	}}
+	conn, err := config.ListenPacket(context.Background(), "udp4", address)
+	check(err)
+	_, port, _ := net.SplitHostPort(conn.LocalAddr().String())
+	return port
 }
 
 // portOf is the port of a listener.

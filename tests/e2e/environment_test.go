@@ -23,7 +23,7 @@ const (
 
 // insideTests are the stops that must behave the same in every environment.
 const insideTests = "TestInside|TestGracefulStop$|TestNothingStops|TestIgnoredSignal|TestForceKills|TestSuspendedIs|TestTwoOwners|" +
-	"TestUDPNeeds|TestFamily$|TestStubbornFamily|TestOwnAncestor|TestSupervisorIs|TestForwarderIs|TestRestartIs"
+	"TestUDPNeeds|TestSharedUDP|TestFamily$|TestStubbornFamily|TestOwnAncestor|TestSupervisorIs|TestForwarderIs|TestRestartIs"
 
 // runInside runs the tests again in a throwaway container without capabilities.
 func runInside(t *testing.T, kind, pattern string, flags ...string) {

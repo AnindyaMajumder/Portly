@@ -127,6 +127,16 @@ func TestTwoOwnersAreRefused(t *testing.T) {
 	}
 }
 
+// TestSharedUDPIsRefused keeps both owners of a shared UDP port, like mDNS on 5353.
+func TestSharedUDPIsRefused(t *testing.T) {
+	first := start(t, "udp-share")
+	second := start(t, "udp-share", "PORTLY_E2E_PORT="+first.ports[0])
+	got := stop(t, first.ports[0]+"/udp", "--force")
+	if got.exit != 5 || got.json.Results[0].Error.Code != "ambiguous_owner" || !first.alive() || !second.alive() {
+		t.Errorf("exit %d\n%s", got.exit, got.stdout)
+	}
+}
+
 // TestUDPNeedsToBeNamed proves a bare port never stops UDP.
 func TestUDPNeedsToBeNamed(t *testing.T) {
 	s := start(t, "udp")
