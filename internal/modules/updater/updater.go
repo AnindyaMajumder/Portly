@@ -206,8 +206,11 @@ func unavailable(ctx context.Context, err error) error {
 func checksumFor(sums []byte, name string) (string, bool) {
 	for line := range strings.Lines(string(sums)) {
 		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[1] == name && len(fields[0]) == sha256.Size*2 {
-			return strings.ToLower(fields[0]), true
+		if len(fields) != 2 || fields[1] != name {
+			continue
+		}
+		if sum, err := hex.DecodeString(fields[0]); err == nil && len(sum) == sha256.Size {
+			return hex.EncodeToString(sum), true
 		}
 	}
 	return "", false

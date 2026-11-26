@@ -241,3 +241,21 @@ func TestBuildPlatform(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// FuzzDownloads never panics on hostile checksums or archives, and extracts only a sane binary.
+func FuzzDownloads(f *testing.F) {
+	t := &testing.T{}
+	f.Add([]byte(strings.Repeat("ab", 32)+"  portly.tar.gz\n"), tarGz(t, entry{"portly", tar.TypeReg, "new"}))
+	f.Add([]byte("x"), []byte("PK\x03\x04"))
+	f.Fuzz(func(t *testing.T, sums, archive []byte) {
+		if hash, ok := checksumFor(sums, "portly.tar.gz"); ok && len(hash) != 64 {
+			t.Errorf("hash %q", hash)
+		}
+		for _, name := range []string{"portly.tar.gz", "portly.zip"} {
+			if binary, err := extract(name, archive); err == nil && (len(binary) == 0 || len(binary) > maxArchive) {
+				t.Errorf("%s: %d bytes", name, len(binary))
+			}
+		}
+		_ = domain.IsNewerVersion(string(sums), "0.8.0")
+	})
+}
