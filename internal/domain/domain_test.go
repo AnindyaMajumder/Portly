@@ -207,6 +207,8 @@ func TestApproveRefusesChanges(t *testing.T) {
 		"suspended":        func(s *StopTarget) { s.Suspended = true },
 		"paused":           func(s *StopTarget) { s.Paused = true },
 		"kind":             func(s *StopTarget) { s.Kind = KindFamily },
+		"child gained":     func(s *StopTarget) { s.Children = []ProcessID{{PID: 700, Start: "7", UserID: "1000"}} },
+		"sidecar gained":   func(s *StopTarget) { s.SharesNet = []string{"sidecar"} },
 	}
 	for name, change := range changes {
 		current := testTarget()
@@ -214,6 +216,21 @@ func TestApproveRefusesChanges(t *testing.T) {
 		if _, err := Approve(testTarget(), current, Graceful); err == nil || AsError(err).Code != CodeChanged {
 			t.Errorf("%s: got %v, want target_changed", name, err)
 		}
+	}
+}
+
+// TestUnreadableChildrenStayTheSame approves a container whose root-owned processes hide their executable.
+func TestUnreadableChildrenStayTheSame(t *testing.T) {
+	planned := testTarget()
+	planned.Children = []ProcessID{{PID: 700, Start: "7", UserID: "0"}, {PID: 701, Start: "8", UserID: "0"}}
+	current := planned
+	current.Children = append([]ProcessID{}, planned.Children...)
+	if _, err := Approve(planned, current, Graceful); err != nil {
+		t.Errorf("unchanged children refused: %v", err)
+	}
+	current.Children[1].Start = "9"
+	if _, err := Approve(planned, current, Graceful); err == nil {
+		t.Error("a replaced child must refuse")
 	}
 }
 

@@ -31,9 +31,12 @@ func planID(targets []domain.StopTarget) string {
 
 // encodeTarget covers identity, named sockets, reach and state, never names.
 func encodeTarget(target domain.StopTarget) []byte {
-	var named, bindings, other, members [][]byte
+	var named, bindings, other, members, sharers [][]byte
 	for _, member := range target.Members {
 		members = append(members, encodeTexts(strconv.Itoa(member.PID), member.Start, member.UserID, member.Exe))
+	}
+	for _, shared := range target.SharesNet {
+		sharers = append(sharers, encodeTexts(shared))
 	}
 	for _, socket := range target.Named {
 		named = append(named, encodeTexts(socket.String(), string(socket.Protocol), strconv.Itoa(int(socket.Family)), socket.NetNS, socket.OSID))
@@ -49,6 +52,8 @@ func encodeTarget(target domain.StopTarget) []byte {
 		encodeTexts(target.Container.Engine, target.Container.ID, target.Container.StartedAt),
 		encodeSet(members), encodeSet(named), encodeSet(bindings), encodeSet(other),
 		encodeTexts(strconv.FormatBool(target.Suspended), strconv.FormatBool(target.Paused)),
+		// Children come and go, so they are checked again before the signal instead
+		encodeSet(sharers),
 	}
 	return encodeList(fields)
 }

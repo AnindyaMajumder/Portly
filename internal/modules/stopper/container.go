@@ -1,6 +1,7 @@
 package stopper
 
 import (
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -90,7 +91,7 @@ func finishContainer(snapshot domain.Snapshot, result resolution, owner domain.P
 	// Podman turns an endless timeout into an immediate kill
 	case owner.Engine.Kind != "docker":
 		return result.refuse(domain.CodeEngineRejected)
-	case container.Orchestrator != "":
+	case container.Orchestrator != "" || isServiceManaged(snapshot, container):
 		return result.refuse(domain.CodeContainerManaged)
 	case !target.GracefulAvailable && !isForced:
 		return result.refuse(domain.CodeNoGraceful)
@@ -149,4 +150,43 @@ func isExplained(snapshot domain.Snapshot, engine domain.Engine, bindings []doma
 		}
 	}
 	return true
+}
+
+// Programs whose service would start a container again
+var dockerClients = []string{"docker", "docker-compose"}
+
+// isServiceManaged finds a Docker client in a systemd service, such as docker run with Restart=always.
+func isServiceManaged(snapshot domain.Snapshot, container domain.Container) bool {
+	for _, process := range snapshot.Processes {
+		if process.Unit.Kind == domain.UnitService && isDockerClient(process) && refersTo(process, container) {
+			return true
+		}
+	}
+	return false
+}
+
+// isDockerClient matches by name, which may only add a refusal.
+func isDockerClient(process domain.Process) bool {
+	program := process.Name
+	if len(process.Args) > 0 {
+		program = path.Base(process.Args[0])
+	}
+	return slices.Contains(dockerClients, program) || slices.Contains(dockerClients, process.Name)
+}
+
+// refersTo matches a client's arguments or Compose folder to the container.
+func refersTo(process domain.Process, container domain.Container) bool {
+	isComposeFolder := container.ComposeProject != "" && container.Directory != "" && process.Dir == container.Directory
+	for _, arg := range process.Args {
+		value := arg
+		if option, after, isOption := strings.Cut(arg, "="); isOption && strings.HasPrefix(option, "-") {
+			value = after
+		}
+		isID := len(value) >= 12 && strings.HasPrefix(container.ID, value)
+		isProject := container.ComposeProject != "" && value == container.ComposeProject
+		if value == container.Name || isID || isProject {
+			return true
+		}
+	}
+	return isComposeFolder
 }

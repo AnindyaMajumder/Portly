@@ -201,6 +201,19 @@ func sameReach(planned, current StopTarget) bool {
 			return false
 		}
 	}
+	// A child or a sidecar network that was never shown would be affected unseen
+	// By PID and start time: other users' children have no readable executable
+	for _, child := range current.Children {
+		isKnown := func(shown ProcessID) bool { return shown.PID == child.PID && shown.Start == child.Start }
+		if !slices.ContainsFunc(planned.Children, isKnown) {
+			return false
+		}
+	}
+	for _, shared := range current.SharesNet {
+		if !slices.Contains(planned.SharesNet, shared) {
+			return false
+		}
+	}
 	return current.GracefulAvailable == planned.GracefulAvailable
 }
 

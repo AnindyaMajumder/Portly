@@ -336,3 +336,58 @@ func TestGracefulSignals(t *testing.T) {
 		}
 	}
 }
+
+// TestServiceClientsManageContainers refuses containers a systemd service would start again.
+func TestServiceClientsManageContainers(t *testing.T) {
+	client := func(unit domain.UnitKind, dir string, args ...string) func(*domain.Snapshot) {
+		return func(s *domain.Snapshot) {
+			process := developer(970, 1)
+			process.Name, process.Args, process.Dir, process.TTY = "docker", args, dir, domain.No
+			process.Unit = domain.Unit{Name: "web.service", Kind: unit}
+			add(s, process)
+		}
+	}
+	compose := func(s *domain.Snapshot) {
+		editContainer(s, func(c *domain.Container) { c.ComposeProject, c.Directory = "shop", "/srv/shop" })
+	}
+	cases := []struct {
+		name    string
+		edit    func(*domain.Snapshot)
+		refused bool
+	}{
+		{"docker run by name", client(domain.UnitService, "/", "/usr/bin/docker", "run", "--rm", "--name", "db", "nginx"), true},
+		{"docker run with name=", client(domain.UnitService, "/", "docker", "run", "--name=db", "nginx"), true},
+		{"attached by id", client(domain.UnitService, "/", "docker", "start", "-a", dbID[:12]), true},
+		{"compose folder", func(s *domain.Snapshot) {
+			compose(s)
+			client(domain.UnitService, "/srv/shop", "docker", "compose", "up")(s)
+		}, true},
+		{"compose project", func(s *domain.Snapshot) {
+			compose(s)
+			client(domain.UnitService, "/", "docker-compose", "-p", "shop", "up")(s)
+		}, true},
+		{"from a terminal", client(domain.UnitScope, "/", "docker", "run", "--rm", "--name", "db", "nginx"), false},
+		{"other container", client(domain.UnitService, "/", "docker", "run", "--name", "cache", "redis"), false},
+		{"short id", client(domain.UnitService, "/", "docker", "logs", dbID[:4]), false},
+	}
+	for _, c := range cases {
+		snapshot := world()
+		published(&snapshot)
+		c.edit(&snapshot)
+		plan := ask(snapshot, web)
+		if refused := codeOf(plan) == domain.CodeContainerManaged; refused != c.refused || (!c.refused && len(plan.Targets) != 1) {
+			t.Errorf("%s: got %q, %d targets", c.name, codeOf(plan), len(plan.Targets))
+		}
+	}
+}
+
+// TestSidecarChangesThePlanID makes --expect refuse when a container gained a network sharer.
+func TestSidecarChangesThePlanID(t *testing.T) {
+	snapshot := world()
+	published(&snapshot)
+	base := ask(snapshot, web).ID
+	editContainer(&snapshot, func(c *domain.Container) { c.SharesNet = []string{"sidecar"} })
+	if changed := ask(snapshot, web).ID; changed == "" || changed == base {
+		t.Errorf("id %q stayed %q", changed, base)
+	}
+}

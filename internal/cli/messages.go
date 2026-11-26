@@ -19,7 +19,7 @@ var reasons = map[domain.Code]struct{ message, hint string }{
 	domain.CodeProtected:            {"it is part of the system or of the session portly runs in", "Close that program or session itself if you need the port"},
 	domain.CodeForwarder:            {"its process only forwards to something else", "Stop the container, virtual machine or remote service behind it"},
 	domain.CodeSupervised:           {"a supervisor would restart it", "Stop it through its supervisor"},
-	domain.CodeContainerManaged:     {"an orchestrator manages its container", "Stop it through Swarm, Kubernetes or systemd"},
+	domain.CodeContainerManaged:     {"something would start its container again", "Stop it through its orchestrator or systemd service"},
 	domain.CodeContainerUnproven:    {"its container is not proven to run on this machine", "Stop it with the engine's own command"},
 	domain.CodeContainerSelf:        {"portly may be running in that container", "Run portly outside the container"},
 	domain.CodeRefusedElsewhere:     {"the same owner was refused on another port you named", "See that port's reason first"},

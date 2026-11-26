@@ -153,6 +153,10 @@ func orchestrator(labels map[string]string) string {
 			return "kubernetes"
 		case label == "PODMAN_SYSTEMD_UNIT":
 			return "systemd"
+		case strings.HasPrefix(label, "com.hashicorp.nomad."):
+			return "nomad"
+		case strings.HasPrefix(label, "com.amazonaws.ecs."):
+			return "ecs"
 		}
 	}
 	return ""

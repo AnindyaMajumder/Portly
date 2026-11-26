@@ -224,6 +224,7 @@ func TestOrchestrators(t *testing.T) {
 	for label, want := range map[string]string{
 		"com.docker.swarm.service.id": "swarm", "io.kubernetes.pod.name": "kubernetes", "io.x-k8s.kind.cluster": "kubernetes",
 		"PODMAN_SYSTEMD_UNIT": "systemd", "com.docker.compose.project": "",
+		"com.hashicorp.nomad.alloc_id": "nomad", "com.amazonaws.ecs.task-arn": "ecs",
 	} {
 		if got := orchestrator(map[string]string{label: "x"}); got != want {
 			t.Errorf("%s: %q", label, got)
