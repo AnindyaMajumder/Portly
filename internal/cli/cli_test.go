@@ -33,6 +33,9 @@ type fakeApp struct {
 	forced    bool
 	panics    bool
 	closed    bool
+	// For portly update
+	updatePlan app.UpdatePlan
+	updateErr  error
 }
 
 // List returns the report.
@@ -54,6 +57,18 @@ func (f *fakeApp) Inspect(_ context.Context, refs []domain.PortRef) (app.Report,
 func (f *fakeApp) Plan(_ context.Context, request domain.StopRequest, expect string) (app.Plan, error) {
 	f.request, f.expect = request, expect
 	return f.plan, f.err
+}
+
+// CheckUpdate returns the fixed update plan.
+func (f *fakeApp) CheckUpdate(_ context.Context, current string) (app.UpdatePlan, error) {
+	f.updatePlan.Current = current
+	return f.updatePlan, f.err
+}
+
+// Update records the install, or fails like the app.
+func (f *fakeApp) Update(context.Context, app.UpdatePlan) error {
+	f.executed++
+	return f.updateErr
 }
 
 // CanStop is true unless a test closes the gate.
@@ -165,7 +180,7 @@ func TestGoldenOutput(t *testing.T) {
 		{"list-pipe", nil, nil}, {"list-wide", width(140), nil}, {"list-80", width(80), nil}, {"list-40", width(40), nil},
 		{"list-color", func(c *Console) { c.Width, c.Color = 80, true }, nil},
 		{"details", nil, []string{"22", "5353", "5432", "6000", "8000", "9000", "9999"}},
-		{"help", nil, []string{"--help"}}, {"help-stop", nil, []string{"stop", "--help"}}, {"version", nil, []string{"--version"}},
+		{"help", nil, []string{"--help"}}, {"help-stop", nil, []string{"stop", "--help"}}, {"help-update", nil, []string{"update", "--help"}}, {"version", nil, []string{"--version"}},
 	}
 	for _, c := range cases {
 		report := listOnly
@@ -690,5 +705,60 @@ func TestFramedLinesLineUp(t *testing.T) {
 		if len(widths) == 0 || slices.Max(widths) != slices.Min(widths) || widths[0] > columns {
 			t.Errorf("%d columns: widths %v\n%s", columns, widths, got.out)
 		}
+	}
+}
+
+// TestUpdate asks before replacing the binary, and never prompts for JSON.
+func TestUpdate(t *testing.T) {
+	newer := app.UpdatePlan{Latest: "0.8.1", Path: "/home/dev/.local/bin/portly", IsNewer: true}
+	release := func(c *Console) { c.Version, c.Home = "0.8.0", "/home/dev" }
+	asking := func(c *Console) { release(c); interactive(c) }
+	cases := []struct {
+		name     string
+		plan     app.UpdatePlan
+		edit     func(*Console)
+		input    string
+		args     []string
+		exit     int
+		executed int
+		out      string
+	}{
+		{"up to date", app.UpdatePlan{Latest: "0.8.0"}, release, "", nil, 0, 0, "portly 0.8.0 is up to date."},
+		{"yes", newer, release, "", []string{"--yes"}, 0, 1, "Updated portly 0.8.0 → 0.8.1 in ~/.local/bin/portly"},
+		{"no terminal", newer, release, "", nil, 6, 0, "portly 0.8.1 is available, you have 0.8.0."},
+		{"asked yes", newer, asking, "y\n", nil, 0, 1, "Updated portly"},
+		{"asked no", newer, asking, "n\n", nil, 6, 0, ""},
+		{"json", newer, release, "", []string{"--json"}, 6, 0, `"status": "confirmation_required"`},
+		{"json yes", newer, release, "", []string{"--json", "--yes"}, 0, 1, `"status": "updated"`},
+		{"json up to date", app.UpdatePlan{Latest: "0.8.0"}, release, "", []string{"--json"}, 0, 0, `"status": "up_to_date"`},
+	}
+	for _, c := range cases {
+		fake := &fakeApp{updatePlan: c.plan}
+		got := invoke(t, fake, c.input, c.edit, append([]string{"update"}, c.args...)...)
+		if got.exit != c.exit || fake.executed != c.executed || !strings.Contains(got.out, c.out) {
+			t.Errorf("%s: exit %d, executed %d\n%s%s", c.name, got.exit, fake.executed, got.out, got.err)
+		}
+		if slices.Contains(c.args, "--json") {
+			checkDocument(t, got.out)
+		}
+	}
+}
+
+// TestUpdateFailures keep their reason and say what to do next.
+func TestUpdateFailures(t *testing.T) {
+	denied := domain.NewError(domain.CodePermissionDenied, "Can't write to /opt/portly", "")
+	release := func(c *Console) { c.Version, c.Executable = "0.8.0", "/opt/my apps/portly" }
+	got := invoke(t, &fakeApp{err: denied}, "", release, "update")
+	if got.exit != 4 || !strings.Contains(got.err, "sudo '/opt/my apps/portly' update") {
+		t.Errorf("exit %d\n%s", got.exit, got.err)
+	}
+	failed := domain.NewError(domain.CodeChecksumMismatch, "bad download", "Try again")
+	plan := app.UpdatePlan{Latest: "0.8.1", IsNewer: true}
+	got = invoke(t, &fakeApp{updatePlan: plan, updateErr: failed}, "", release, "update", "--yes", "--json")
+	if document := checkDocument(t, got.out); got.exit != 1 || document["error"].(map[string]any)["code"] != "checksum_mismatch" {
+		t.Errorf("exit %d\n%s", got.exit, got.out)
+	}
+	if got := invoke(t, &fakeApp{}, "", release, "update", "extra"); got.exit != 2 {
+		t.Errorf("arguments: exit %d", got.exit)
 	}
 }

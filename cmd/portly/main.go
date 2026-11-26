@@ -13,6 +13,7 @@ import (
 	"github.com/AnindyaMajumder/Portly/internal/modules/docker"
 	"github.com/AnindyaMajumder/Portly/internal/modules/project"
 	"github.com/AnindyaMajumder/Portly/internal/modules/stopper"
+	"github.com/AnindyaMajumder/Portly/internal/modules/updater"
 )
 
 var version = "dev"
@@ -22,7 +23,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	engines := docker.New()
 	world := app.NewWorld(discovery.New(), engines)
-	portly := app.New(world, project.New(), stopper.New(world, engines))
+	portly := app.New(world, project.New(), stopper.New(world, engines), updater.New())
 	exit := cli.Run(ctx, os.Args[1:], cli.SystemConsole(buildVersion()), portly)
 	cancel()
 	os.Exit(exit)

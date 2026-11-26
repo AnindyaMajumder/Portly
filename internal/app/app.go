@@ -49,11 +49,12 @@ type App struct {
 	world    *World
 	projects Projects
 	stopper  Stopper
+	updater  Updater
 }
 
 // New wires the use cases.
-func New(world *World, projects Projects, stopper Stopper) *App {
-	return &App{world: world, projects: projects, stopper: stopper}
+func New(world *World, projects Projects, stopper Stopper, updater Updater) *App {
+	return &App{world: world, projects: projects, stopper: stopper, updater: updater}
 }
 
 // World joins discovery with the container engines.

@@ -27,6 +27,8 @@ type UseCases interface {
 	Plan(ctx context.Context, request domain.StopRequest, expect string) (app.Plan, error)
 	Execute(ctx context.Context, plan app.Plan, confirm app.Confirm) []domain.Outcome
 	CanStop() bool
+	CheckUpdate(ctx context.Context, current string) (app.UpdatePlan, error)
+	Update(ctx context.Context, plan app.UpdatePlan) error
 }
 
 // Console is everything outside the process, so tests can replace it.
@@ -152,7 +154,8 @@ func (s *session) rootCommand() *cobra.Command {
 		Short: "See what uses your ports, and stop it safely",
 		Long:  "Portly shows what uses local TCP and UDP ports, which project it belongs to, and stops it safely.",
 		Example: "  portly                    list ports\n  portly 8000               details for a port\n" +
-			"  portly 8000/udp           only UDP\n  portly stop 8000          stop it, after asking\n  portly --json             for scripts and agents",
+			"  portly 8000/udp           only UDP\n  portly stop 8000          stop it, after asking\n" +
+			"  portly update             update to the latest release\n  portly --json             for scripts and agents",
 		Args: cobra.ArbitraryArgs, Version: s.console.Version, SilenceErrors: true, SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -171,7 +174,7 @@ func (s *session) rootCommand() *cobra.Command {
 	root.SetFlagErrorFunc(func(command *cobra.Command, err error) error {
 		return domain.NewError(domain.CodeUsage, err.Error(), "Run '"+command.CommandPath()+" --help' to see the options")
 	})
-	root.AddCommand(s.stopCommand())
+	root.AddCommand(s.stopCommand(), s.updateCommand())
 	return root
 }
 
@@ -302,6 +305,9 @@ func (s *session) fail(err error) int {
 	failure := domain.AsError(err)
 	if errors.Is(err, context.Canceled) {
 		failure = domain.NewError(domain.CodeCancelled, "Cancelled", "Nothing was stopped")
+		if s.command == "update" {
+			failure.Hint = "Nothing was changed"
+		}
 	}
 	if s.options.json {
 		if writeErr := s.writeJSON(failureDocument(s.command, failure)); writeErr != nil {

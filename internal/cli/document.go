@@ -22,6 +22,13 @@ type document struct {
 	PlanID        optionalString `json:"plan_id,omitzero"`
 	Targets       *[]targetJSON  `json:"targets,omitempty"`
 	Results       *[]resultJSON  `json:"results,omitempty"`
+	Update        *updateJSON    `json:"update,omitempty"`
+}
+
+type updateJSON struct {
+	Current string `json:"current"`
+	Latest  string `json:"latest"`
+	Status  string `json:"status"`
 }
 
 // optionalString is left out, null, or a string.

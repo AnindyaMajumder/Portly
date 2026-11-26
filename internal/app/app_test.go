@@ -110,7 +110,7 @@ func processes(parents map[int]int) map[int]domain.Process {
 // build wires an app around fakes.
 func build(snapshot domain.Snapshot, engines ...domain.Engine) *App {
 	world := NewWorld(&fakeScanner{snapshot: snapshot}, fakeEngines{engines: engines})
-	return New(world, fakeProjects{}, &fakeStopper{})
+	return New(world, fakeProjects{}, &fakeStopper{}, nil)
 }
 
 // host is an unprivileged caller with an ephemeral range.
@@ -233,7 +233,7 @@ func TestProjectsAreDetectedOnce(t *testing.T) {
 	snapshot := domain.Snapshot{Host: host, Processes: processes(map[int]int{10: 0}), Sockets: []domain.Socket{
 		socketOn("127.0.0.1", 80, domain.TCP, "1000", 10), socketOn("127.0.0.1", 81, domain.TCP, "1000", 10),
 	}}
-	app := New(NewWorld(&fakeScanner{snapshot: snapshot}, fakeEngines{}), fakeProjects{&calls}, nil)
+	app := New(NewWorld(&fakeScanner{snapshot: snapshot}, fakeEngines{}), fakeProjects{&calls}, nil, nil)
 	report, _ := app.List(t.Context(), false)
 	if calls != 1 || report.Ports[1].Owners[0].Project.Name != "project-of-app" {
 		t.Errorf("%d calls, %+v", calls, report.Ports[1].Owners[0].Project)
@@ -310,7 +310,7 @@ func TestWorldPassesThrough(t *testing.T) {
 	if _, holds, _ := world.Reread(domain.Holder{}, domain.SocketID{}); !holds || scanner.rereads != 1 {
 		t.Error("reread did not pass through")
 	}
-	app := New(world, fakeProjects{}, &fakeStopper{})
+	app := New(world, fakeProjects{}, &fakeStopper{}, nil)
 	if _, err := app.List(t.Context(), false); err == nil {
 		t.Error("list hid the error")
 	}
@@ -330,7 +330,7 @@ func TestPlanAndExpect(t *testing.T) {
 		{Kind: domain.KindContainer, Container: domain.ContainerRef{Engine: "e", ID: "db"}},
 	}}}
 	engine := domain.Engine{ID: "e", Containers: []domain.Container{{ID: "db", Name: "db-1", ComposeProject: "shop"}}}
-	app := New(NewWorld(&fakeScanner{snapshot: snapshot}, fakeEngines{engines: []domain.Engine{engine}}), fakeProjects{}, fake)
+	app := New(NewWorld(&fakeScanner{snapshot: snapshot}, fakeEngines{engines: []domain.Engine{engine}}), fakeProjects{}, fake, nil)
 	plan, err := app.Plan(t.Context(), domain.StopRequest{}, "abc")
 	if err != nil || len(plan.Targets) != 2 {
 		t.Fatalf("%+v %v", plan, err)
@@ -358,7 +358,7 @@ func TestExecute(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	fake := &fakeStopper{}
 	plan := Plan{Stop: domain.StopPlan{Targets: []domain.StopTarget{{Root: domain.ProcessID{PID: 1}}, {Root: domain.ProcessID{PID: 2}}}}}
-	app := New(nil, nil, fake)
+	app := New(nil, nil, fake, nil)
 	if outcomes := app.Execute(ctx, plan, nil); len(outcomes) != 2 || !slices.Equal(fake.ran, []int{1, 2}) {
 		t.Errorf("%+v %v", outcomes, fake.ran)
 	}

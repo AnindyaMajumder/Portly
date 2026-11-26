@@ -1,0 +1,17 @@
+Checks GitHub for a newer release, asks, then downloads it, verifies its checksum and replaces this binary.
+
+Usage:
+  portly update [flags]
+
+Examples:
+  portly update             check, ask, then update
+  portly update --yes       do not ask
+  portly update --json      check only, change nothing
+
+Flags:
+  -h, --help   help for update
+  -y, --yes    do not ask
+
+Global Flags:
+      --json      print one JSON document
+      --verbose   print diagnostics on stderr

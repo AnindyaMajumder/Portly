@@ -23,6 +23,7 @@ var allowedImports = map[string][]string{
 	"internal/modules/project":   {"internal/domain"},
 	"internal/modules/docker":    {"internal/domain"},
 	"internal/modules/stopper":   {"internal/domain"},
+	"internal/modules/updater":   {"internal/domain"},
 	"internal/app":               {"internal/domain", "internal/modules/"},
 	"internal/cli":               {"internal/domain", "internal/app", "internal/platform/"},
 	"cmd/portly":                 {"internal/app", "internal/cli", "internal/modules/"},
