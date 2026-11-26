@@ -21,6 +21,10 @@ portly \- see what uses your ports, and stop it safely
 .RB [ \-\-json ]
 .RB [ \-\-verbose ]
 .br
+.B portly update
+.RB [ \-\-yes ]
+.RB [ \-\-json ]
+.br
 .B portly completion
 .IR shell
 .SH DESCRIPTION
@@ -31,6 +35,10 @@ A bare port means TCP. Use
 .IB port /udp
 to stop a UDP owner.
 Stopping is enabled only on platforms whose tests have passed. Elsewhere it is refused.
+.PP
+.B update
+checks GitHub for a newer release, asks, then downloads it, verifies its checksum and replaces the binary.
+It never downgrades. A binary installed by a package manager is updated through that package manager.
 .SH OPTIONS
 .TP
 .B \-\-all
@@ -41,7 +49,11 @@ Print one JSON document. Never prompts. With
 .B stop
 and without
 .B \-\-yes
-it stops nothing and returns a plan id.
+it stops nothing and returns a plan id. With
+.B update
+and without
+.B \-\-yes
+it only checks.
 .TP
 .BR \-y ", " \-\-yes
 Do not ask. Every check still runs.
@@ -63,7 +75,7 @@ Print help or the version.
 Success, including a lookup of a free port.
 .TP
 .B 1
-Internal error.
+Internal error, or an update that could not be downloaded or verified.
 .TP
 .B 2
 Bad usage.
