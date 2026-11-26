@@ -758,6 +758,14 @@ func TestUpdateFailures(t *testing.T) {
 	if document := checkDocument(t, got.out); got.exit != 1 || document["error"].(map[string]any)["code"] != "checksum_mismatch" {
 		t.Errorf("exit %d\n%s", got.exit, got.out)
 	}
+	windows := func(c *Console) { release(c); c.Windows = true }
+	if got := invoke(t, &fakeApp{err: denied}, "", windows, "update"); !strings.Contains(got.err, "administrator terminal") || strings.Contains(got.err, "sudo") {
+		t.Errorf("windows hint:\n%s", got.err)
+	}
+	cancelled := invoke(t, &fakeApp{err: context.Canceled}, "", release, "update")
+	if cancelled.exit != 6 || !strings.Contains(cancelled.err, "Nothing was changed") {
+		t.Errorf("cancel: exit %d\n%s", cancelled.exit, cancelled.err)
+	}
 	if got := invoke(t, &fakeApp{}, "", release, "update", "extra"); got.exit != 2 {
 		t.Errorf("arguments: exit %d", got.exit)
 	}

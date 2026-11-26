@@ -305,9 +305,6 @@ func (s *session) fail(err error) int {
 	failure := domain.AsError(err)
 	if errors.Is(err, context.Canceled) {
 		failure = domain.NewError(domain.CodeCancelled, "Cancelled", "Nothing was stopped")
-		if s.command == "update" {
-			failure.Hint = "Nothing was changed"
-		}
 	}
 	if s.options.json {
 		if writeErr := s.writeJSON(failureDocument(s.command, failure)); writeErr != nil {

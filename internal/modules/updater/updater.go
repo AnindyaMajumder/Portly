@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,37 +23,37 @@ import (
 const (
 	repository = "https://github.com/AnindyaMajumder/Portly"
 	// A release archive is about 5 MiB
-	maxArchive     = 64 << 20
-	maxChecksums   = 1 << 20
-	requestTimeout = 2 * time.Minute
+	maxArchive   = 64 << 20
+	maxChecksums = 1 << 20
+	// Slow links still finish, Ctrl-C ends it sooner
+	requestTimeout = 10 * time.Minute
 	maxRedirects   = 5
 )
 
-var (
-	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	latestTag      = regexp.MustCompile(`/releases/tag/v([0-9]+\.[0-9]+\.[0-9]+)$`)
-)
+var latestTag = regexp.MustCompile(`/releases/tag/v([0-9]+\.[0-9]+\.[0-9]+)$`)
 
 // Updater finds, verifies and installs releases.
 type Updater struct {
 	base   string
 	client *http.Client
 	// Like linux_amd64 or windows_arm64, empty if unknown
-	platform   string
-	executable string
+	platform func() string
+	locate   func() (string, error)
 }
 
-// New returns an updater for the running binary.
+// New returns an updater for the running binary. It reads nothing until used.
 func New() *Updater {
-	executable, err := os.Executable()
-	if err == nil {
-		executable, err = filepath.EvalSymlinks(executable)
-	}
-	if err != nil {
-		executable = ""
-	}
 	client := &http.Client{Timeout: requestTimeout, CheckRedirect: httpsOnly}
-	return &Updater{base: repository, client: client, platform: buildPlatform(), executable: executable}
+	return &Updater{base: repository, client: client, platform: buildPlatform, locate: runningBinary}
+}
+
+// runningBinary is the real file behind the running executable.
+func runningBinary() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(executable)
 }
 
 // httpsOnly follows a few redirects, never to plain HTTP.
@@ -104,33 +105,45 @@ func (u *Updater) Latest(ctx context.Context) (string, error) {
 	return match[1], nil
 }
 
-// Target is the running binary's path, if Portly may replace it.
-func (u *Updater) Target() (string, error) {
-	if u.executable == "" {
+// InstallPath is the running binary's path, if Portly may replace it.
+func (u *Updater) InstallPath() (string, error) {
+	path, err := u.locate()
+	if err != nil {
 		return "", domain.NewError(domain.CodeUpdateUnavailable, "Could not find where portly is installed",
 			"Install the new version with the install script from "+repository)
 	}
-	dir := filepath.Dir(u.executable)
-	if isPackaged(dir) {
+	dir := filepath.Dir(path)
+	if isPackaged(path) {
 		return "", domain.NewError(domain.CodePackageManaged, "A package manager installed portly in "+dir,
-			"Download the new package from "+repository+"/releases/latest and install it the same way")
+			"Update it with that package manager, or install the new package from "+repository+"/releases/latest")
 	}
 	probe, err := os.CreateTemp(dir, ".portly-update-*")
 	if err != nil {
-		return "", domain.NewError(domain.CodePermissionDenied, "Can't write to "+dir, "Run the update as the owner of "+dir)
+		return "", cantWrite(dir, err)
 	}
 	_ = probe.Close()
 	_ = os.Remove(probe.Name())
-	return u.executable, nil
+	return path, nil
+}
+
+// cantWrite tells a permission problem, which an administrator can solve, from the rest.
+func cantWrite(dir string, err error) error {
+	if errors.Is(err, fs.ErrPermission) {
+		return domain.NewError(domain.CodePermissionDenied, "Can't write to "+dir, "Run the update as the owner of "+dir)
+	}
+	return domain.NewError(domain.CodeUpdateUnavailable, "Can't write to "+dir+": "+err.Error()+", nothing was changed",
+		"Free some space or make the folder writable, then try again")
 }
 
 // Install downloads a release, verifies it and replaces the binary at path.
 func (u *Updater) Install(ctx context.Context, version, path string) error {
-	if !versionPattern.MatchString(version) || u.platform == "" {
+	platform := u.platform()
+	if !domain.IsReleaseVersion(version) || platform == "" {
 		return domain.NewError(domain.CodeUpdateUnavailable, "No release matches this build", "Install the new version with the install script from "+repository)
 	}
-	archive := "portly_" + version + "_" + u.platform + ".tar.gz"
-	if strings.HasPrefix(u.platform, "windows_") {
+	// Release archives are named after the build's target, see archives in .goreleaser.yaml
+	archive := "portly_" + version + "_" + platform + ".tar.gz"
+	if strings.HasPrefix(platform, "windows_") {
 		archive = strings.TrimSuffix(archive, ".tar.gz") + ".zip"
 	}
 	sums, err := u.download(ctx, version, "checksums.txt", maxChecksums)
@@ -139,7 +152,7 @@ func (u *Updater) Install(ctx context.Context, version, path string) error {
 	}
 	want, found := checksumFor(sums, archive)
 	if !found {
-		return domain.NewError(domain.CodeUpdateUnavailable, "Release "+version+" has no build for "+u.platform, "See "+repository+"/releases for what is available")
+		return domain.NewError(domain.CodeUpdateUnavailable, "Release "+version+" has no build for "+platform, "See "+repository+"/releases for what is available")
 	}
 	data, err := u.download(ctx, version, archive, maxArchive)
 	if err != nil {
@@ -200,17 +213,22 @@ func checksumFor(sums []byte, name string) (string, bool) {
 	return "", false
 }
 
-// replace writes the new binary next to the old one, then swaps them.
+// replace writes the new binary next to the old one, with its mode, then swaps them.
 func replace(path string, binary []byte) error {
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".portly-update-*")
+	dir := filepath.Dir(path)
+	mode := fs.FileMode(0o755)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	temporary, err := os.CreateTemp(dir, ".portly-update-*")
 	if err != nil {
-		return domain.NewError(domain.CodePermissionDenied, "Can't write to "+filepath.Dir(path), "Run the update as the owner of that folder")
+		return cantWrite(dir, err)
 	}
 	// Gone already after a successful swap
 	defer func() { _ = os.Remove(temporary.Name()) }()
 	_, err = temporary.Write(binary)
 	if err == nil {
-		err = temporary.Chmod(0o755)
+		err = temporary.Chmod(mode)
 	}
 	if err == nil {
 		err = temporary.Sync()
@@ -219,10 +237,18 @@ func replace(path string, binary []byte) error {
 		err = closeErr
 	}
 	if err != nil {
-		return fmt.Errorf("write the new binary, nothing was changed: %w", err)
+		return cantWrite(dir, err)
 	}
-	if err := swap(temporary.Name(), path); err != nil {
-		return fmt.Errorf("replace %s: %w", path, err)
+	return swapped(temporary.Name(), path)
+}
+
+// swapped explains a failed swap. Errors that already say what to do pass through.
+func swapped(next, path string) error {
+	err := swap(next, path)
+	var known *domain.Error
+	if err == nil || errors.As(err, &known) {
+		return err
 	}
-	return nil
+	return domain.NewError(domain.CodeUpdateUnavailable, "Could not replace "+path+": "+err.Error()+", nothing was changed",
+		"Close other portly windows and try again")
 }

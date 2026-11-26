@@ -77,7 +77,7 @@ func (r release) serve(t *testing.T) *Updater {
 	t.Cleanup(server.Close)
 	client := server.Client()
 	client.CheckRedirect = httpsOnly
-	return &Updater{base: server.URL, client: client, platform: "linux_amd64"}
+	return &Updater{base: server.URL, client: client, platform: func() string { return "linux_amd64" }}
 }
 
 // goodRelease has a matching checksum for its archive.
@@ -206,25 +206,20 @@ func TestZipTakesOnlyTheExecutable(t *testing.T) {
 	}
 }
 
-// TestTargetNeedsAWritableFolder refuses before anything is downloaded.
-func TestTargetNeedsAWritableFolder(t *testing.T) {
+// TestInstallPathNeedsAKnownWritableFolder refuses before anything is downloaded.
+func TestInstallPathNeedsAKnownWritableFolder(t *testing.T) {
 	path := installed(t)
-	if got, err := (&Updater{executable: path}).Target(); got != path || err != nil {
+	found := &Updater{locate: func() (string, error) { return path, nil }}
+	if got, err := found.InstallPath(); got != path || err != nil {
 		t.Errorf("writable: %q %v", got, err)
 	}
-	if _, err := (&Updater{}).Target(); codeOf(err) != domain.CodeUpdateUnavailable {
+	lost := &Updater{locate: func() (string, error) { return "", os.ErrNotExist }}
+	if _, err := lost.InstallPath(); codeOf(err) != domain.CodeUpdateUnavailable {
 		t.Errorf("unknown path: %v", err)
 	}
-	if os.Geteuid() == 0 {
-		return
-	}
-	dir := filepath.Dir(path)
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	if _, err := (&Updater{executable: path}).Target(); codeOf(err) != domain.CodePermissionDenied {
-		t.Errorf("read-only: %v", err)
+	gone := &Updater{locate: func() (string, error) { return filepath.Join(path, "missing", "portly"), nil }}
+	if _, err := gone.InstallPath(); codeOf(err) != domain.CodeUpdateUnavailable {
+		t.Errorf("missing folder is not a permission problem: %v", err)
 	}
 }
 

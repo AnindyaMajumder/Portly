@@ -25,6 +25,7 @@ type document struct {
 	Update        *updateJSON    `json:"update,omitempty"`
 }
 
+// updateJSON is what portly update found or did.
 type updateJSON struct {
 	Current string `json:"current"`
 	Latest  string `json:"latest"`

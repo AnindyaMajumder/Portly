@@ -35,7 +35,9 @@ builds:
         - sh -c "! go version -m '{{ .Path }}' | grep -q -- '-tags'"
 
 archives:
-  - formats: [tar.gz]
+  # install.sh, install.ps1 and portly update depend on these names
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]

@@ -40,7 +40,7 @@ func (s *session) updateCommand() *cobra.Command {
 func (s *session) update(ctx context.Context) error {
 	plan, err := s.app.CheckUpdate(ctx, s.console.Version)
 	if err != nil {
-		return s.withAdminHint(err)
+		return s.updateFailure(err)
 	}
 	if !plan.IsNewer {
 		return s.reportUpdate(plan, statusUpToDate, nil)
@@ -54,7 +54,7 @@ func (s *session) update(ctx context.Context) error {
 		return domain.NewError(domain.CodeCancelled, "Cancelled", "Nothing was changed")
 	}
 	if err := s.app.Update(ctx, plan); err != nil {
-		return s.withAdminHint(err)
+		return s.updateFailure(err)
 	}
 	return s.reportUpdate(plan, statusUpdated, nil)
 }
@@ -81,11 +81,16 @@ func (s *session) reportUpdate(plan app.UpdatePlan, status string, failure *doma
 	return nil
 }
 
-// withAdminHint tells how to update a binary in a folder the user can't write.
-func (s *session) withAdminHint(err error) error {
+// updateFailure says nothing changed on Ctrl-C, and how to update a folder the user can't write.
+func (s *session) updateFailure(err error) error {
 	var known *domain.Error
-	if !errors.As(err, &known) || known.Code != domain.CodePermissionDenied {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return domain.NewError(domain.CodeCancelled, "Cancelled", "Nothing was changed")
+	case !errors.As(err, &known) || known.Code != domain.CodePermissionDenied:
 		return err
+	case s.console.Windows:
+		return domain.NewError(known.Code, known.Message, "Run 'portly update' in an administrator terminal")
 	}
 	return domain.NewError(known.Code, known.Message, "To update as administrator:  sudo "+quote(s.console.Executable)+" update")
 }

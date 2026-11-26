@@ -339,3 +339,24 @@ func TestForcedFamilyMayShrinkOnly(t *testing.T) {
 		t.Error("a container is never a process")
 	}
 }
+
+// TestVersions orders release versions and never upgrades to anything else.
+func TestVersions(t *testing.T) {
+	cases := []struct {
+		candidate, current string
+		newer              bool
+	}{
+		{"0.8.1", "0.8.0", true}, {"0.10.0", "0.9.9", true}, {"1.0.0", "0.99.99", true},
+		{"0.8.0", "0.8.0", false}, {"0.7.9", "0.8.0", false},
+		{"0.9.0", "dev", false}, {"v0.9.0", "0.8.0", false}, {"0.9.0-rc1", "0.8.0", false},
+		{"99999999999999999999.0.0", "0.8.0", false},
+	}
+	for _, c := range cases {
+		if got := IsNewerVersion(c.candidate, c.current); got != c.newer {
+			t.Errorf("%s over %s: %v", c.candidate, c.current, got)
+		}
+	}
+	if IsReleaseVersion("0.8.0 (evidence build, for tests only)") || !IsReleaseVersion("0.8.0") {
+		t.Error("release version pattern")
+	}
+}

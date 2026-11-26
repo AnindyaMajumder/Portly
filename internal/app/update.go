@@ -2,9 +2,6 @@ package app
 
 import (
 	"context"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/AnindyaMajumder/Portly/internal/domain"
 )
@@ -12,7 +9,7 @@ import (
 // Updater finds and installs releases.
 type Updater interface {
 	Latest(ctx context.Context) (string, error)
-	Target() (string, error)
+	InstallPath() (string, error)
 	Install(ctx context.Context, version, path string) error
 }
 
@@ -25,14 +22,11 @@ type UpdatePlan struct {
 	IsNewer bool
 }
 
-// Only release builds carry a plain version
-var releaseVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-
 const installCommand = "curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/install.sh | sh"
 
 // CheckUpdate compares this build with the latest release and checks it may be replaced.
 func (a *App) CheckUpdate(ctx context.Context, current string) (UpdatePlan, error) {
-	if !releaseVersion.MatchString(current) {
+	if !domain.IsReleaseVersion(current) {
 		return UpdatePlan{}, domain.NewError(domain.CodeDevBuild, "This is a development build ("+current+"), it can't update itself",
 			"Install a release with: "+installCommand)
 	}
@@ -40,28 +34,18 @@ func (a *App) CheckUpdate(ctx context.Context, current string) (UpdatePlan, erro
 	if err != nil {
 		return UpdatePlan{}, err
 	}
-	plan := UpdatePlan{Current: current, Latest: latest, IsNewer: isNewer(latest, current)}
+	plan := UpdatePlan{Current: current, Latest: latest, IsNewer: domain.IsNewerVersion(latest, current)}
 	if !plan.IsNewer {
 		return plan, nil
 	}
-	plan.Path, err = a.updater.Target()
+	plan.Path, err = a.updater.InstallPath()
 	return plan, err
 }
 
-// Update installs the planned release.
+// Update installs the planned release, checking the plan again so no caller can downgrade.
 func (a *App) Update(ctx context.Context, plan UpdatePlan) error {
-	return a.updater.Install(ctx, plan.Latest, plan.Path)
-}
-
-// isNewer compares two checked X.Y.Z versions.
-func isNewer(candidate, current string) bool {
-	next, now := strings.Split(candidate, "."), strings.Split(current, ".")
-	for i := range next {
-		a, _ := strconv.Atoi(next[i])
-		b, _ := strconv.Atoi(now[i])
-		if a != b {
-			return a > b
-		}
+	if !domain.IsNewerVersion(plan.Latest, plan.Current) || plan.Path == "" {
+		return domain.NewError(domain.CodeUpdateUnavailable, "Nothing newer to install", "Run 'portly update' again")
 	}
-	return false
+	return a.updater.Install(ctx, plan.Latest, plan.Path)
 }

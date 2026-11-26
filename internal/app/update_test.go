@@ -20,8 +20,8 @@ type fakeUpdater struct {
 // Latest returns the fixed release.
 func (f *fakeUpdater) Latest(context.Context) (string, error) { return f.latest, f.latestErr }
 
-// Target returns a fixed path.
-func (f *fakeUpdater) Target() (string, error) {
+// InstallPath returns a fixed path.
+func (f *fakeUpdater) InstallPath() (string, error) {
 	f.targetUsed = true
 	return "/home/dev/.local/bin/portly", f.targetErr
 }
@@ -73,6 +73,11 @@ func TestUpdateInstallsThePlan(t *testing.T) {
 	}
 	if err != nil || updater.installed != "0.8.1 /home/dev/.local/bin/portly" {
 		t.Errorf("%v %q", err, updater.installed)
+	}
+	for _, forged := range []UpdatePlan{{Current: "0.8.1", Latest: "0.8.0", Path: "/x", IsNewer: true}, {Current: "0.8.0", Latest: "0.8.1"}} {
+		if err := portly.Update(t.Context(), forged); err == nil {
+			t.Errorf("forged plan %+v was installed", forged)
+		}
 	}
 	offline := &fakeUpdater{latestErr: domain.NewError(domain.CodeUpdateUnavailable, "offline", "")}
 	if _, err := New(nil, nil, nil, offline).CheckUpdate(t.Context(), "0.8.0"); err == nil || offline.targetUsed {
