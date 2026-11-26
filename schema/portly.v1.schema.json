@@ -184,7 +184,7 @@
       "properties": {
         "current": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
         "latest": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        "status": { "enum": ["updated", "up_to_date", "confirmation_required"] }
+        "status": { "enum": ["updated", "up_to_date", "confirmation_required", "available"] }
       }
     }
   }

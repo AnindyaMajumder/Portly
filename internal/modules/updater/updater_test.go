@@ -113,8 +113,9 @@ func TestLatestReadsTheRedirect(t *testing.T) {
 		"https://github.com/AnindyaMajumder/Portly/releases/tag/v0.9.1": "0.9.1",
 		"/AnindyaMajumder/Portly/releases/tag/v1.10.0":                  "1.10.0",
 		"https://github.com/AnindyaMajumder/Portly/releases":            "",
-		"https://github.com/x/releases/tag/v1.0.0-rc1":                  "",
-		"https://github.com/x/releases/tag/v1.0.0/../../evil":           "",
+		"": "",
+		"https://github.com/x/releases/tag/v1.0.0-rc1":        "",
+		"https://github.com/x/releases/tag/v1.0.0/../../evil": "",
 	} {
 		got, err := release{latest: location}.serve(t).Latest(t.Context())
 		if got != want || (want == "") != (codeOf(err) == domain.CodeUpdateUnavailable) {
@@ -258,4 +259,16 @@ func FuzzDownloads(f *testing.F) {
 		}
 		_ = domain.IsNewerVersion(string(sums), "0.8.0")
 	})
+}
+
+// TestNoReleaseYet says so instead of blaming the connection.
+func TestNoReleaseYet(t *testing.T) {
+	_, err := release{latest: "https://github.com/AnindyaMajumder/Portly/releases"}.serve(t).Latest(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "No release has been published yet") {
+		t.Errorf("got %v", err)
+	}
+	_, err = goodRelease(t).serve(t).download(t.Context(), "0.9.1", "missing.zip", 10)
+	if err == nil || !strings.Contains(err.Error(), "not complete yet") {
+		t.Errorf("missing asset: %v", err)
+	}
 }

@@ -779,7 +779,19 @@ func TestUpdateFailures(t *testing.T) {
 	if cancelled.exit != 6 || !strings.Contains(cancelled.err, "Nothing was changed") {
 		t.Errorf("cancel: exit %d\n%s", cancelled.exit, cancelled.err)
 	}
-	if got := invoke(t, &fakeApp{}, "", release, "update", "extra"); got.exit != 2 {
-		t.Errorf("arguments: exit %d", got.exit)
+	extra := invoke(t, &fakeApp{}, "", release, "update", "extra", "--json")
+	if document := checkDocument(t, extra.out); extra.exit != 2 || document["command"] != "update" {
+		t.Errorf("arguments: exit %d\n%s", extra.exit, extra.out)
+	}
+	blocked := invoke(t, &fakeApp{updatePlan: plan, err: denied}, "", release, "update", "--json")
+	if document := checkDocument(t, blocked.out); blocked.exit != 4 || document["update"].(map[string]any)["status"] != "available" {
+		t.Errorf("available but blocked: exit %d\n%s", blocked.exit, blocked.out)
+	}
+	dev := domain.NewError(domain.CodeDevBuild, "dev", "curl")
+	if got := invoke(t, &fakeApp{err: dev}, "", windows, "update"); !strings.Contains(got.err, "install.ps1") {
+		t.Errorf("windows dev hint:\n%s", got.err)
+	}
+	if got := invoke(t, &fakeApp{}, "", nil, "upgrade"); !strings.Contains(got.err, "portly update") {
+		t.Errorf("upgrade:\n%s", got.err)
 	}
 }

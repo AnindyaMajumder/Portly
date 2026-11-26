@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -94,15 +95,17 @@ func (u *Updater) Latest(ctx context.Context) (string, error) {
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	response, err := client.Do(request)
 	if err != nil {
-		return "", unavailable(ctx, err)
+		return "", failed(ctx, "Could not reach GitHub", err, "Check your connection and try again")
 	}
 	_ = response.Body.Close()
-	match := latestTag.FindStringSubmatch(response.Header.Get("Location"))
-	if match == nil {
-		return "", domain.NewError(domain.CodeUpdateUnavailable, "Could not find the latest release",
-			"Check your connection and try again, or see "+repository+"/releases")
+	location := response.Header.Get("Location")
+	if match := latestTag.FindStringSubmatch(location); match != nil {
+		return match[1], nil
 	}
-	return match[1], nil
+	if strings.HasSuffix(location, "/releases") {
+		return "", domain.NewError(domain.CodeUpdateUnavailable, "No release has been published yet", "See "+repository+"/releases")
+	}
+	return "", domain.NewError(domain.CodeUpdateUnavailable, "Could not find the latest release", "Try again later, or see "+repository+"/releases")
 }
 
 // InstallPath is the running binary's path, if Portly may replace it.
@@ -110,7 +113,7 @@ func (u *Updater) InstallPath() (string, error) {
 	path, err := u.locate()
 	if err != nil {
 		return "", domain.NewError(domain.CodeUpdateUnavailable, "Could not find where portly is installed",
-			"Install the new version with the install script from "+repository)
+			"Download it from "+repository+"/releases/latest")
 	}
 	dir := filepath.Dir(path)
 	if isPackaged(path) {
@@ -139,7 +142,7 @@ func cantWrite(dir string, err error) error {
 func (u *Updater) Install(ctx context.Context, version, path string) error {
 	platform := u.platform()
 	if !domain.IsReleaseVersion(version) || platform == "" {
-		return domain.NewError(domain.CodeUpdateUnavailable, "No release matches this build", "Install the new version with the install script from "+repository)
+		return domain.NewError(domain.CodeUpdateUnavailable, "No release matches this build", "Download it from "+repository+"/releases/latest")
 	}
 	// Release archives are named after the build's target, see archives in .goreleaser.yaml
 	archive := "portly_" + version + "_" + platform + ".tar.gz"
@@ -178,15 +181,19 @@ func (u *Updater) download(ctx context.Context, version, name string, limit int6
 	}
 	response, err := u.client.Do(request)
 	if err != nil {
-		return nil, unavailable(ctx, err)
+		return nil, failed(ctx, "Could not download the update", err, "Check your connection and try again")
 	}
 	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode == http.StatusNotFound {
+		return nil, domain.NewError(domain.CodeUpdateUnavailable, "Release "+version+" is not complete yet, "+name+" is missing",
+			"Try again in a few minutes, or see "+repository+"/releases")
+	}
 	if response.StatusCode != http.StatusOK {
-		return nil, unavailable(ctx, fmt.Errorf("%s: %s", name, response.Status))
+		return nil, failed(ctx, "Could not download the update", errors.New(response.Status), "Try again later")
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return nil, unavailable(ctx, err)
+		return nil, failed(ctx, "Could not download the update", err, "Check your connection and try again")
 	}
 	if int64(len(data)) > limit {
 		return nil, domain.NewError(domain.CodeUpdateUnavailable, name+" is larger than expected, nothing was changed", "Report it at "+repository+"/issues")
@@ -194,12 +201,16 @@ func (u *Updater) download(ctx context.Context, version, name string, limit int6
 	return data, nil
 }
 
-// unavailable explains a failed download, keeping Ctrl-C a cancellation.
-func unavailable(ctx context.Context, err error) error {
+// failed explains a network failure without Go's request prefix, keeping Ctrl-C a cancellation.
+func failed(ctx context.Context, message string, err error, hint string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return domain.NewError(domain.CodeUpdateUnavailable, "Could not download the update: "+err.Error(), "Check your connection and try again")
+	var request *url.Error
+	if errors.As(err, &request) {
+		err = request.Err
+	}
+	return domain.NewError(domain.CodeUpdateUnavailable, message+": "+err.Error(), hint)
 }
 
 // checksumFor finds one file's SHA-256 in a checksums.txt.

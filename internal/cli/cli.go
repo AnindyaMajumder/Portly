@@ -280,6 +280,8 @@ func suggest(word string, args []string) string {
 		return "Run 'portly' to list ports"
 	case word == "version":
 		return "Run 'portly --version'"
+	case slices.Contains([]string{"upgrade", "self-update", "selfupdate", "updte", "udpate", "upate", "updat", "updtae"}, word):
+		return "Did you mean 'portly update'?"
 	case slices.Contains([]string{"sotp", "stpo", "stp", "tsop", "stopp", "top", "sto"}, word) && len(args) > 0 && strings.EqualFold(args[0], word):
 		return "Did you mean '" + clean(strings.Join(append([]string{"portly", "stop"}, args[1:]...), " ")) + "'?"
 	}
