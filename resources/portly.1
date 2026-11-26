@@ -103,14 +103,19 @@ Several ports with different outcomes.
 Disables colour.
 .TP
 .B TERM
-The value dumb disables colour.
+The value dumb disables colour and table borders.
 .TP
 .BR DOCKER_HOST ", " DOCKER_CONTEXT
 Used to find a local container engine. Remote engines are ignored.
+.TP
+.BR HTTPS_PROXY ", " NO_PROXY
+Used by
+.BR update .
 .SH EXAMPLES
 .nf
 portly
 portly 8000
 portly stop 3000 8000
 portly stop 8000 \-\-json
+portly update
 .fi

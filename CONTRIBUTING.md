@@ -2,7 +2,7 @@
 
 ## Start
 
-You need Go 1.27 or later and `make`. Docker is only needed for the container tests.
+You need Go 1.27.4 or later, `make`, and a C compiler such as gcc for the race detector in `make check`. Docker is only needed for the container tests.
 
 ```
 git clone https://github.com/AnindyaMajumder/Portly.git

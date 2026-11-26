@@ -7,11 +7,11 @@ List, lookup, stop and update accept `--json` and print exactly one document on 
 | `portly --json` | `ports`, `hidden_udp` |
 | `portly 8000 --json` | `ports` |
 | `portly stop 8000 --json` | `plan_id`, `targets`, `results` |
-| `portly update --json` | `update`: `current`, `latest`, `status` (`updated`, `up_to_date`, `confirmation_required`) |
+| `portly update --json` | `update`: `current`, `latest`, `status` (`updated`, `up_to_date`, `confirmation_required`, `available`) |
 
 `stop --json` never prompts. Without `--yes` it stops nothing, returns `confirmation_required` and a `plan_id`. If every port is refused, `error` and `plan_id` are `null` and the reasons are in `results[].error`. Passing that id to `--expect` refuses the whole command if the targets have changed. An empty or malformed id is a usage error. The id is not a secret and authorizes nothing.
 
-`update --json` never prompts either. Without `--yes` it changes nothing and returns `confirmation_required` when a newer release exists.
+`update --json` never prompts either. Without `--yes` it changes nothing: when a newer release exists, `update.status` is `confirmation_required` and `error` says so, with exit status 6. `available` means a newer release exists but this binary can't be replaced, and `error` says why (`permission_denied`, `package_managed`). A development build fails with `dev_build` and has no `update`. Exit status 1 covers both `internal` and a failed download; `error.code` tells them apart.
 
 Each entry in `results` is one named port and points to a target by index. Each target lists the other endpoints and child processes it affects. After execution, `outcome` says what happened.
 

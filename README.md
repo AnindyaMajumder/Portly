@@ -46,16 +46,40 @@ curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/in
 powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/install.ps1 | Out-String | iex"
 ```
 
-Both install for the current user, without administrator rights, and verify the checksum. They put `portly` in `~/.local/bin`, or `portly.exe` in `%LOCALAPPDATA%\Programs\Portly`, and tell you if that folder is not on your `PATH`. Set `PORTLY_INSTALL_DIR` to choose another folder, and `PORTLY_VERSION` for an older release.
+Both install for the current user, without administrator rights, and verify the checksum. They put `portly` in `~/.local/bin`, or `portly.exe` in `%LOCALAPPDATA%\Programs\Portly`, and print the command to add that folder to your `PATH` if needed. In WSL you get the Linux build, which sees the ports of the WSL machine, not of Windows.
 
-### Update and uninstall
+Variables go after the pipe, so `sh` sees them:
 
-| | macOS, Linux, Git Bash | Windows PowerShell or cmd |
-|---|---|---|
-| Update | `portly update`, or `curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/update.sh \| sh` | `portly update`, or `powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/update.ps1 \| Out-String \| iex"` |
-| Uninstall | `curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.sh \| sh` | `powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.ps1 \| Out-String \| iex"` |
+```
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/install.sh | PORTLY_INSTALL_DIR=/opt/bin PORTLY_VERSION=0.8.0 sh
+```
 
-`portly update` asks first, never downgrades, and changes nothing if the download does not match its checksum.
+### Update
+
+```
+portly update
+```
+
+It asks first, never downgrades, and changes nothing if the download does not match its checksum. `portly update --json` only checks. The same through the scripts:
+
+```
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/update.sh | sh
+powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/update.ps1 | Out-String | iex"
+```
+
+### Uninstall
+
+macOS, Linux, Git Bash:
+
+```
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.sh | sh
+```
+
+Windows PowerShell or cmd:
+
+```
+powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/latest/download/uninstall.ps1 | Out-String | iex"
+```
 
 ### Linux packages
 
@@ -77,7 +101,7 @@ Packages include the man page and shell completions. To update, install the newe
 
 ### From source
 
-With Go 1.27 or later: `make build`, then `bin/portly`.
+With Go 1.27.4 or later: `make build`, then `bin/portly`.
 
 ## Safety
 
