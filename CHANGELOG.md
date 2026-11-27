@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3 (2026-11-27)
+
+- Same program as 0.8.2. The release check for the Windows cmd install command is fixed.
+
 ## 0.8.2 (2026-11-27)
 
 - Stopping works on Linux (amd64 and arm64), for processes and Docker containers. Its evidence gate passed with real gunicorn, uvicorn, Django, Flask and Node servers. macOS, Windows and other Linux processors still refuse.

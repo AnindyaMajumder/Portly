@@ -37,19 +37,19 @@ Every release is on the [releases page](https://github.com/AnindyaMajumder/Portl
 **macOS, Linux, and Windows in Git Bash or WSL**
 
 ```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.sh | PORTLY_VERSION=0.8.2 sh
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/install.sh | PORTLY_VERSION=0.8.3 sh
 ```
 
 **Windows PowerShell**
 
 ```
-$env:PORTLY_VERSION='0.8.2'; curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.ps1 | Out-String | iex
+$env:PORTLY_VERSION='0.8.3'; curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/install.ps1 | Out-String | iex
 ```
 
 **Windows cmd**
 
 ```
-powershell -NoProfile -Command "$env:PORTLY_VERSION='0.8.2'; curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.ps1 | Out-String | iex"
+powershell -NoProfile -Command "$env:PORTLY_VERSION='0.8.3'; curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/install.ps1 | Out-String | iex"
 ```
 
 All three install for the current user, without administrator rights, and verify the checksum. They put `portly` in `~/.local/bin`, or `portly.exe` in `%LOCALAPPDATA%\Programs\Portly`, and print the command to add that folder to your `PATH` if needed. In WSL you get the Linux build, which sees the ports of the WSL machine, not of Windows.
@@ -57,7 +57,7 @@ All three install for the current user, without administrator rights, and verify
 Variables go after the pipe, so `sh` sees them. To choose the folder:
 
 ```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/install.sh | PORTLY_VERSION=0.8.2 PORTLY_INSTALL_DIR=/opt/bin sh
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/install.sh | PORTLY_VERSION=0.8.3 PORTLY_INSTALL_DIR=/opt/bin sh
 ```
 
 ### Update
@@ -71,19 +71,19 @@ Until 1.0.0, update by running the install command of the newer version from the
 macOS, Linux, Git Bash:
 
 ```
-curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/uninstall.sh | sh
+curl -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/uninstall.sh | sh
 ```
 
 Windows PowerShell:
 
 ```
-curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/uninstall.ps1 | Out-String | iex
+curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/uninstall.ps1 | Out-String | iex
 ```
 
 Windows cmd:
 
 ```
-powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.2/uninstall.ps1 | Out-String | iex"
+powershell -NoProfile -Command "curl.exe -fsSL https://github.com/AnindyaMajumder/Portly/releases/download/v0.8.3/uninstall.ps1 | Out-String | iex"
 ```
 
 ### Linux packages
@@ -92,11 +92,11 @@ Download the package for your system from the releases page (`amd64`, `arm64`, `
 
 | System | Install | Remove |
 |---|---|---|
-| Debian, Ubuntu (apt) | `sudo apt install ./portly_0.8.2_linux_amd64.deb` | `sudo apt remove portly` |
-| Fedora, RHEL (dnf) | `sudo dnf install ./portly_0.8.2_linux_amd64.rpm` | `sudo dnf remove portly` |
-| openSUSE (zypper) | `sudo zypper install --allow-unsigned-rpm ./portly_0.8.2_linux_amd64.rpm` | `sudo zypper remove portly` |
-| Alpine (apk) | `sudo apk add --allow-untrusted ./portly_0.8.2_linux_amd64.apk` | `sudo apk del portly` |
-| Arch (pacman) | `sudo pacman -U ./portly_0.8.2_linux_amd64.pkg.tar.zst` | `sudo pacman -R portly` |
+| Debian, Ubuntu (apt) | `sudo apt install ./portly_0.8.3_linux_amd64.deb` | `sudo apt remove portly` |
+| Fedora, RHEL (dnf) | `sudo dnf install ./portly_0.8.3_linux_amd64.rpm` | `sudo dnf remove portly` |
+| openSUSE (zypper) | `sudo zypper install --allow-unsigned-rpm ./portly_0.8.3_linux_amd64.rpm` | `sudo zypper remove portly` |
+| Alpine (apk) | `sudo apk add --allow-untrusted ./portly_0.8.3_linux_amd64.apk` | `sudo apk del portly` |
+| Arch (pacman) | `sudo pacman -U ./portly_0.8.3_linux_amd64.pkg.tar.zst` | `sudo pacman -R portly` |
 
 Packages include the man page and shell completions. To update, install the newer package the same way.
 
