@@ -82,6 +82,7 @@ jobs:
         shell: cmd
         run: |
           powershell -NoProfile -Command "$env:PORTLY_VERSION='%VERSION%'; curl.exe -fsSL %BASE%/install.ps1 | Out-String | iex" || exit /b 1
-          "%LOCALAPPDATA%\Programs\Portly\portly.exe" --version | findstr /x /c:"portly %VERSION%" || exit /b 1
+          rem portly ends lines with LF, which findstr /x never matches
+          "%LOCALAPPDATA%\Programs\Portly\portly.exe" --version | findstr /c:"portly %VERSION%" || exit /b 1
           powershell -NoProfile -Command "curl.exe -fsSL %BASE%/uninstall.ps1 | Out-String | iex" || exit /b 1
           if exist "%LOCALAPPDATA%\Programs\Portly\portly.exe" exit /b 1
